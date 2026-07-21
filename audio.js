@@ -230,6 +230,18 @@ const SFX = {
                g.gain.exponentialRampToValueAtTime(0.0003, t0 + 1.4);
                o.connect(f); f.connect(g); g.connect(sfxBus); o.start(t0); o.stop(t0 + 1.5);
                for (const w of [0.12, 0.37, 0.55, 0.86, 1.04]) burst(0.014, 0.20, 900, "bandpass", w); },
+  bats()     { // a low-bit flurry: squeaky square-wave chirps + leathery wingbeats
+               const t0 = ctx.currentTime;
+               for (let i = 0; i < 18; i++) {
+                 const w = i * 0.085 + Math.random() * 0.06;
+                 const f = 1700 + Math.random() * 2400;
+                 const o = ctx.createOscillator(); o.type = "square";
+                 o.frequency.setValueAtTime(f, t0 + w);
+                 o.frequency.exponentialRampToValueAtTime(f * 0.42, t0 + w + 0.07);
+                 const g = ctx.createGain(); env(g, t0 + w, 0.004, 0.055, 0.08);
+                 o.connect(g); g.connect(sfxBus); o.start(t0 + w); o.stop(t0 + w + 0.16);
+               }
+               for (let i = 0; i < 16; i++) burst(0.04, 0.07, 380, "lowpass", i * 0.105 + Math.random() * 0.05); },
   applause() { // an old low-bit house clapping — crunchy, sample-and-held, swelling then thinning
                const t0 = ctx.currentTime, dur = 3.4, sr = ctx.sampleRate;
                const n = Math.floor(sr * dur);

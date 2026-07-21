@@ -66,7 +66,7 @@ function loadImg(name) {
     i.src = V + name + ".png?av=9"; IMG[name] = i; }
   return IMG[name];
 }
-["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask"].forEach(loadImg);
+["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-bat1","el-bat2"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
 const SAVE_K = "retro.state";
@@ -421,6 +421,7 @@ const cards = {
       { r:[1181,740,190,320], cur:"fwd", go:"annex", t:"dissolve", spd:"fast" },
       { r:[360,880,230,230], cur:"quill", go:"guestbook", t:"irisOpen", spd:"fast", at:[460,1000] },
       { r:[970,920,250,300], cur:"hand", fn:"glassTapFlower" },
+      { r:[643,0,247,150], cur:"hand", fn:"batsIn" },        // the oculus at the top of the dome
     ],
     draw(ctx,H,S,t){ /* no doorway labels — the doorways speak for themselves */ },
   },
@@ -696,6 +697,54 @@ const ACTIONS = {
     H.sfx("buzz");
     window.AUDIO.ambient(S.st.lampOut ? "dark" : "lamp");
     S.A.dirty=true;
+  },
+
+  /* the oculus at the top of the dome — a flurry of bats drops in, circles, and leaves */
+  batsIn(hot,H,S){
+    if (S.st.bats) return;
+    S.st.bats = 1;
+    H.sfx("bats");
+    const HOLE = [766, 62];                      // the oculus centre, master coords
+    const N = 6;
+    const bat = [];
+    for (let i = 0; i < N; i++) {
+      bat.push({
+        ph:  i / N,                              // spread them around their orbit
+        cx:  640 + Math.random()*260,            // each circles its own patch of the room
+        cy:  430 + Math.random()*190,
+        rx:  300 + Math.random()*210,
+        ry:  150 + Math.random()*100,
+        turns: 1.6 + Math.random()*0.9,
+        dir: Math.random() < 0.5 ? 1 : -1,
+        lag: Math.random()*0.10,                 // stagger the entrances
+        flap: 9 + Math.random()*4,               // wingbeats per second
+        sz:  128 + Math.random()*62,
+      });
+    }
+    const DUR = 7600;
+    const ss = (a,b,x)=>{ const k=Math.max(0,Math.min(1,(x-a)/(b-a))); return k*k*(3-2*k); };
+    H.anim("rotunda", DUR, (ctx,k)=>{
+      for (const b of bat) {
+        const u = Math.max(0, Math.min(1, (k - b.lag) / (1 - b.lag)));
+        if (u <= 0) continue;
+        // out of the hole → around the room → back into the hole
+        const w  = ss(0, 0.20, u) * (1 - ss(0.80, 1, u));
+        const th = b.ph*Math.PI*2 + b.dir * u * b.turns * Math.PI*2;
+        const ox = b.cx + Math.cos(th)*b.rx;
+        const oy = b.cy + Math.sin(th)*b.ry + Math.sin(u*Math.PI*7)*14;   // bob
+        const x  = HOLE[0] + (ox - HOLE[0]) * w;
+        const y  = HOLE[1] + (oy - HOLE[1]) * w;
+        const s  = (0.18 + 0.82*w) * b.sz;                                // small at the hole
+        const im = IMG[(k*b.flap) % 1 < 0.5 ? "el-bat1" : "el-bat2"];     // two-frame flap
+        if (!im || !im.complete || !im.naturalWidth) continue;
+        const h = s * im.naturalHeight / im.naturalWidth;
+        ctx.save();
+        ctx.translate(x, y);
+        if (Math.cos(th) * b.dir < 0) ctx.scale(-1, 1);                   // face the way it's going
+        ctx.drawImage(im, -s/2, -h/2, s, h);
+        ctx.restore();
+      }
+    }, ()=>{ S.st.bats = 0; S.A.dirty = true; });
   },
 
   /* rotunda flower */
