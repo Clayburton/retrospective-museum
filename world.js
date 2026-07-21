@@ -124,6 +124,17 @@ function elem(ctx, name, x, y, w, h) {          // draw a transparent art elemen
 function elemInvert(ctx, name, x, y, w, h) {    // draw a WHITE element (el-straysky is already white)
   elem(ctx, name, x, y, w, h);
 }
+/* fill a rect edge to edge with an element, cropping the overflow — for pictures
+   that should FILL their frame rather than float inside it with letterboxing */
+function elemCover(ctx, name, x, y, w, h) {
+  const im = IMG[name]; if (!im || !im.complete || !im.naturalWidth) return;
+  const s = Math.max(w / im.naturalWidth, h / im.naturalHeight);
+  ctx.save();
+  ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();       // the frame masks the overflow
+  ctx.drawImage(im, x + (w - im.naturalWidth*s)/2, y + (h - im.naturalHeight*s)/2,
+                im.naturalWidth*s, im.naturalHeight*s);
+  ctx.restore();
+}
 /* draw a DARK-ink element recoloured to paper-white — el-ufo is black line art,
    which is invisible against the night sky unless we flip it. Cached per element. */
 const WHITE_CV = {};
@@ -210,6 +221,37 @@ function filmStop() {
 /* the hallway picture frame's real opening in the art (detected, not guessed) */
 const HFRAME_R = [343, 332, 853, 870];
 
+/* ---- the right-hand picture is a window onto a 1988 Macintosh ----
+   The Manhole (Cyan, 1988) is the granddaddy of this whole museum, and the
+   Internet Archive runs it in-browser and publishes an embed player for it.
+   We point at THEIR player — nothing is copied or re-hosted here — and sit it
+   inside the frame's opening so the painting really is a working old Mac.      */
+const MANHOLE_EMBED = "https://archive.org/embed/TheManholeMacintosh";
+let MH_IF = null;
+function mhFit() {
+  const st = document.getElementById("stage");
+  if (!MH_IF || !st) return;
+  const r = st.getBoundingClientRect(), sc = r.width / M;
+  MH_IF.style.left   = (r.left + HFRAME_R[0]*sc) + "px";
+  MH_IF.style.top    = (r.top  + HFRAME_R[1]*sc) + "px";
+  MH_IF.style.width  = (HFRAME_R[2]*sc) + "px";
+  MH_IF.style.height = (HFRAME_R[3]*sc) + "px";
+}
+function mhShow(on) {
+  if (!on) { if (MH_IF) { MH_IF.remove(); MH_IF = null; } return; }
+  if (MH_IF) { mhFit(); return; }
+  MH_IF = document.createElement("iframe");
+  MH_IF.id = "manholeFrame";
+  MH_IF.setAttribute("frameborder", "0");
+  MH_IF.setAttribute("allowfullscreen", "");
+  MH_IF.allow = "autoplay; fullscreen";
+  MH_IF.style.cssText = "position:absolute;border:0;z-index:6;background:#000;";
+  MH_IF.src = MANHOLE_EMBED;
+  document.body.appendChild(MH_IF);
+  mhFit();
+}
+window.addEventListener("resize", mhFit);
+
 /* the eye in the left hallway picture — six frames, open → shut → open */
 const EYE_SEQ = [[1,90],[2,70],[3,70],[4,180],[5,110],[6,130]];
 const EYE_MS  = EYE_SEQ.reduce((a,b)=>a+b[1],0);
@@ -292,7 +334,12 @@ const cards = {
       { r:[688,1116,160,124], cur:"hand", fn:"streetGrate" },                // the storm grate in the road
       { r:[540,780,460,300], cur:"fwd", exitZone:true, fn:"leaveMuseum" },   // the end of the road → leave
     ],
-    after(H,S){ if (S.st.starsOut) starsBg(true); },
+    // the lamp's hum follows the lamp: it buzzes while lit, and the street goes
+    // quiet when it's out — including when you come back to the card later
+    after(H,S){
+      if (S.st.starsOut) starsBg(true);
+      window.AUDIO && window.AUDIO.ambient(S.st.lampOut ? "dark" : "lamp");
+    },
     leave(H,S){ starsBg(false); },
     draw(ctx,H,S,t){
       const st=S.st;
@@ -514,14 +561,27 @@ const cards = {
   "hframe": {
     id:"hframe", img:V+"hframe.png", tone:"ink", room:"ent", ambient:"hall", depth:3,
     nav:{ back:"hall-2" },
-    hots:[ { r:HFRAME_R, cur:"hand", fn:"blinkEye" } ],
+    hots:[ { r:HFRAME_R, cur:"hand", fn:"framePoke" } ],
+    leave(H,S){ mhShow(false); },
+    after(H,S){ if ((S.st.hframePic||1) === 2 && S.st.manhole) mhShow(true); },
     draw(ctx,H,S,t){
-      const n = S.st.hframePic || 1, R = HFRAME_R, m = 26;   // m = the mat around the picture
-      // the frame opening is black; the picture is matted inside it
+      const n = S.st.hframePic || 1, R = HFRAME_R;
       ctx.fillStyle = "#000"; ctx.fillRect(R[0], R[1], R[2], R[3]);
-      const bx = R[0]+m, by = R[1]+m, bw = R[2]-m*2, bh = R[3]-m*2;
-      if (n === 1) elem(ctx, "el-eye" + eyeFrame(S,t), bx, by, bw, bh);       // the eye that blinks
-      else         elem(ctx, "el-hpic" + n, bx, by, bw, bh);
+      // the picture FILLS its frame; the frame masks whatever spills over
+      if (n === 1) {
+        elemCover(ctx, "el-eye" + eyeFrame(S,t), R[0], R[1], R[2], R[3]);     // the eye that blinks
+      } else if (S.st.manhole) {
+        /* the Archive's emulator is a real iframe sitting over this opening */
+      } else {
+        elemCover(ctx, "el-hpic2", R[0], R[1], R[2], R[3]);
+        // a small invitation, in the museum's own sticker style
+        const pw = 470, ph = 84, px = 768 - pw/2, py = R[1] + R[3] - 132;
+        ctx.fillStyle = "rgb(244,241,232)"; ctx.fillRect(px, py, pw, ph);
+        ctx.strokeStyle = "#101010"; ctx.lineWidth = 4;
+        ctx.strokeRect(px + 6, py + 6, pw - 12, ph - 12);
+        H.type(ctx, "· play the manhole ·", 768, py + ph/2,
+               { cells:4.2, align:"center", color:"#101010", plain:true, seed:61 });
+      }
     },
   },
 
@@ -643,7 +703,14 @@ const ACTIONS = {
 
   /* the curtain goes up and the house applauds */
   raiseCurtain(hot,H,S){
-    if (S.st.curtainT0) return;                     // already up (or going)
+    if (S.st.curtainT0) {                           // curtain's up — the screen is a play/pause switch
+      if (FILM.video && FILM.on) {
+        if (FILM.video.paused) { FILM.video.play().catch(()=>{}); H.sfx("tick"); }
+        else                   { FILM.video.pause(); H.sfx("tickSoft"); }
+      } else { filmPlay(); H.sfx("tick"); }
+      S.A.dirty = true;
+      return;
+    }
     S.st.curtainT0 = performance.now();
     H.sfx("applause");
     // the house lights go down as the curtain goes up
@@ -780,6 +847,19 @@ const ACTIONS = {
 
   /* hallway picture zoom */
   toFrame(hot,H,S){ S.st.hframePic = hot.pic; H.go("hframe",{ t:"zoomOpen", spd:"fast" }); },
+
+  /* whichever picture you're stood in front of, poking it does its own thing */
+  framePoke(hot,H,S){
+    if ((S.st.hframePic || 1) === 2) {              // the right one is a 1988 Macintosh
+      if (S.st.manhole) return;                     // already running — let the emulator have the clicks
+      S.st.manhole = 1;
+      H.sfx("clack"); setTimeout(()=>H.sfx("bellLow"), 220);
+      mhShow(true);
+      S.A.dirty = true;
+      return;
+    }
+    ACTIONS.blinkEye(hot,H,S);
+  },
 
   /* click the eye and it blinks shut, then opens again */
   blinkEye(hot,H,S){
@@ -945,6 +1025,6 @@ function build(H){
 ACTIONS.plaqueClick=function(hot,H,S){ const T=S.typeOn; if(T&&!T.done){ T.skip=true; S.A.dirty=true; return; } H.go(hot.wall,{ t:"zoomClose", spd:"fast" }); };
 
 /* ================================================================ EXPORT = */
-window.WORLD = { start:"facade", cards, songs, PROCS, ACTIONS, build, ALBUM11 };
+window.WORLD = { start:"facade", cards, songs, PROCS, ACTIONS, build, ALBUM11, FILM, CAM };
 
 })();
