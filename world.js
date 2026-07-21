@@ -72,7 +72,9 @@ function loadImg(name) {
 ["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-lamp-mask","el-bat1","el-bat2",
  "el-eye1","el-eye2","el-eye3","el-eye4","el-eye5","el-eye6",
  "el-hpic2b","el-hpic2c",
- "el-fish1","el-fish2","el-fish3","el-fish4"].forEach(loadImg);
+ "el-fish1","el-fish2","el-fish3","el-fish4",
+ "el-booth-mask",
+ "el-recI1","el-recI2","el-recI3","el-recI4","el-recI5","el-recI6","el-recI7","el-recI8","el-recI9","el-recI10","el-recI11","el-recI12","el-recS1","el-recS2","el-recS3","el-recS4","el-recS5","el-recS6","el-recS7","el-recS8","el-recS9","el-recS10","el-recS11","el-recS12"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
 const SAVE_K = "retro.state";
@@ -364,6 +366,71 @@ function drawFisher(ctx, S, t) {
   ctx.restore();
 }
 
+/* ================================ the receptionist (hall-1) ================
+   Two 12-frame loops, every frame cropped to ONE shared bbox so nothing shifts
+   between poses or between the idle and speaking sets. He's drawn clipped to
+   the booth's white pane (el-booth-mask), which was flooded from inside the
+   glass — the bell's outline stopped the flood, so the bell is excluded from
+   the mask and therefore always stays in FRONT of him.                        */
+const BOOTH = [1287, 573, 114, 363];        // the pane, measured off the art
+const REC = { w: 250, cx: 1352, y: 566 };   // his size and where he settles
+const REC_FPS = 11;
+const REC_IN_MS = 950;                       // rising into the window
+const REC_LINES = [
+  "Welcome to the Clay and Kelsy Retrospective",
+  "Please sign the guest book in the rotunda",
+  "I seem to have lost my key to the theater and Photo Booth...",
+];
+const REC_CPS = 30;
+
+function recFrame(S, t) {
+  const n = Math.floor(t / 1000 * REC_FPS) % 12 + 1;
+  return (S.st.recState === 3 ? "el-recS" : "el-recI") + n;
+}
+function drawReceptionist(ctx, H, S, t) {
+  const st = S.st;
+  if (!st.recState) return;
+  const im = IMG[recFrame(S, t)];
+  if (!im || !im.complete || !im.naturalWidth) return;
+  const w = REC.w, h = w * im.naturalHeight / im.naturalWidth;
+  let dy = 0;
+  if (st.recState === 1) {                   // rising up into the window
+    const k = Math.min(1, (t - st.recT0) / REC_IN_MS);
+    dy = (1 - k * k * (3 - 2 * k)) * (BOOTH[3] + h * 0.5);
+  }
+  ctx.save();
+  ctx.beginPath(); ctx.rect(BOOTH[0], BOOTH[1], BOOTH[2], BOOTH[3]); ctx.clip();
+  ctx.drawImage(im, REC.cx - w / 2, REC.y + dy, w, h);
+  ctx.restore();
+}
+
+/* a HyperCard speech balloon: square white plate, hard black rule, a tail
+   pointing back at whoever is talking, and the line typed in a character
+   at a time the way the placards do it */
+function drawSpeech(ctx, H, S, t) {
+  const st = S.st;
+  if (st.recState !== 3 || st.recSayT0 == null) return;
+  const full = REC_LINES[st.recLine % REC_LINES.length];
+  const shown = Math.max(0, Math.floor((t - st.recSayT0) / 1000 * REC_CPS));
+  const R = [612, 470, 620, 214];
+  ctx.save();
+  ctx.fillStyle = "rgb(246,243,235)"; ctx.fillRect(R[0], R[1], R[2], R[3]);
+  ctx.strokeStyle = "#101010"; ctx.lineWidth = 5;
+  ctx.strokeRect(R[0], R[1], R[2], R[3]);
+  ctx.lineWidth = 2; ctx.strokeRect(R[0] + 9, R[1] + 9, R[2] - 18, R[3] - 18);
+  ctx.fillStyle = "rgb(246,243,235)";        // the tail, aimed at the booth
+  ctx.beginPath();
+  ctx.moveTo(R[0] + R[2] - 6, R[1] + 118); ctx.lineTo(R[0] + R[2] + 82, R[1] + 150);
+  ctx.lineTo(R[0] + R[2] - 6, R[1] + 176); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "#101010"; ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(R[0] + R[2] - 4, R[1] + 118); ctx.lineTo(R[0] + R[2] + 82, R[1] + 150);
+  ctx.lineTo(R[0] + R[2] - 4, R[1] + 176); ctx.stroke();
+  ctx.restore();
+  H.wrap(ctx, full, R[0] + 34, R[1] + 56,
+         { cells: 5.2, maxW: R[2] - 68, lh: 1.55, chars: shown, color: "#101010", plain: true, seed: 300 });
+}
+
 /* text under the pictures reads small on a phone — nudge it up when the
    square is being squeezed onto a narrow screen */
 function mobK(S) { return (S && S.cssW && S.cssW < 760) ? 1.28 : 1; }
@@ -495,11 +562,13 @@ const cards = {
 
   /* ---- hallway (2 stops) ---- */
   "hall-1": {
-    id:"hall-1", img:V+"hall-1.png", tone:"ink", room:"ent", ambient:"hall", depth:4,
+    id:"hall-1", img:V+"hall-1.png", tone:"ink", room:"ent", ambient:"hall", depth:4, live:true,
     nav:{ fwd:"hall-2", back:"facade" },
+    draw(ctx,H,S,t){ drawReceptionist(ctx,H,S,t); drawSpeech(ctx,H,S,t); },
     hots:[
       { r:[706,600,150,320], cur:"fwd", go:"hall-2", t:"dissolve", spd:"fast" },
-      { r:[1210,830,150,150], cur:"hand", fn:"boothBell", sfx:"bellLow" },
+      { r:BOOTH, cur:"hand", fn:"recTalk" },                    // the receptionist himself
+      { r:[1280,835,140,130], cur:"hand", fn:"boothBell", sfx:"bellLow" },
       { r:[90,420,240,690],  cur:"lock", curKey:"key", fn:"movieDoor", onHover:"movieHover" },
       ...bulbHots([[780,276]]),                       // the hanging lantern
     ],
@@ -849,7 +918,37 @@ const ACTIONS = {
     setTimeout(()=>{ if (S.cur === "movie") filmPlay(); }, CURTAIN_MS + 120);
     S.A.dirty = true;
   },
-  boothBell(hot,H){ /* bellLow via sfx on the hotspot */ },
+  /* ring the bell and somebody rises into the booth window */
+  boothBell(hot,H,S){
+    H.sfx("bellLow");
+    if (S.st.recState) { H.sfx("tickSoft"); return; }      // he's already there
+    S.st.recState = 1; S.st.recT0 = performance.now();
+    setTimeout(()=>{                                       // wall clock, never from the draw
+      if (S.st.recState === 1) { S.st.recState = 2; S.A.dirty = true; }
+    }, REC_IN_MS + 40);
+    S.A.dirty = true;
+  },
+
+  /* poke the receptionist and he says his piece, a line at a time */
+  recTalk(hot,H,S){
+    const st = S.st;
+    if (!st.recState) { H.sfx("tickSoft"); return; }        // nobody home yet — ring first
+    if (st.recState === 3) return;                          // already talking
+    st.recLine = (st.recLine == null) ? 0 : (st.recLine + 1) % REC_LINES.length;
+    st.recState = 3; st.recSayT0 = performance.now();
+    const line = REC_LINES[st.recLine];
+    const dur = line.length / REC_CPS * 1000;
+    // one short toot every few characters, so it reads as speech not a beep
+    st.recToots = [];
+    for (let i = 0; i < Math.ceil(line.length / 5); i++)
+      st.recToots.push(setTimeout(()=>H.sfx("eleph"), i * (5 / REC_CPS * 1000)));
+    clearTimeout(st.recDone);
+    st.recDone = setTimeout(()=>{                           // back to idling when he's finished
+      if (S.st.recState === 3) { S.st.recState = 2; S.A.dirty = true;
+        window.__mus && window.__mus.renderOnce(); }
+    }, dur + 2200);
+    S.A.dirty = true;
+  },
 
   grassMouse(hot,H,S){                 // something startles in the grass and scurries off
     H.sfx("rustle"); setTimeout(()=>H.sfx("squeak"),120); const r=hot.r;

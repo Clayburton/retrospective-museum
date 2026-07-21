@@ -12,6 +12,7 @@
 let ctx = null, master, sfxBus, songBus, songLpf, analyser;
 let waveArr, freqArr;
 let unlocked = false;
+let ELEPH_I = -1;                 // round-robins the receptionist's toots
 
 /* muffling: the song plays at FULL quality everywhere you roam the museum
    (era rooms + rotunda) so you can wander and still hear the whole track. It
@@ -235,6 +236,18 @@ const SFX = {
                g.gain.exponentialRampToValueAtTime(0.0003, t0 + 1.4);
                o.connect(f); f.connect(g); g.connect(sfxBus); o.start(t0); o.stop(t0 + 1.5);
                for (const w of [0.12, 0.37, 0.55, 0.86, 1.04]) burst(0.014, 0.20, 900, "bandpass", w); },
+  /* the receptionist's voice — a very short digital elephant toot. Four variants
+     cycled round-robin so a line of dialogue never sounds like one repeated bleep. */
+  eleph()    { const t0 = ctx.currentTime;
+               ELEPH_I = (ELEPH_I + 1) % 4;
+               const V = [[420, 760], [500, 300], [360, 620], [610, 380]][ELEPH_I];
+               const o = ctx.createOscillator(); o.type = "square";
+               o.frequency.setValueAtTime(V[0], t0);
+               o.frequency.exponentialRampToValueAtTime(V[1], t0 + 0.085);
+               const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 1500;
+               const g = ctx.createGain(); env(g, t0, 0.006, 0.05, 0.09);
+               o.connect(f); f.connect(g); g.connect(sfxBus); o.start(t0); o.stop(t0 + 0.2);
+               burst(0.03, 0.03, 900, "bandpass", 0.01); },
   bats()     { // a low-bit flurry: squeaky square-wave chirps + leathery wingbeats
                const t0 = ctx.currentTime;
                for (let i = 0; i < 18; i++) {
