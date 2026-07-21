@@ -2,7 +2,7 @@
 /* ============================================================================
    audio.js — one WebAudio context for the whole museum.
    - Songs: HTMLAudioElement → MediaElementSource → gain → lowpass → master.
-     Exclusive playback; distance muffling by room graph distance.
+     Exclusive playback; muffled only in the entrance hallway (by depth).
    - Room tone: synthesized loops (brown noise + hum through filters) — no
      sample assets. Crossfade on card change.
    - SFX: tiny synthesized one-shots (ticks, clacks, bells, rings, buzz…).
@@ -13,9 +13,10 @@ let ctx = null, master, sfxBus, songBus, songLpf, analyser;
 let waveArr, freqArr;
 let unlocked = false;
 
-/* muffling: 0 = in the room with the song; otherwise 1 + the card's `depth`
-   (how far down the entrance hallway you've wandered) — the song fades and
-   muddies step by step as you walk away, still faintly there at the street. */
+/* muffling: the song plays at FULL quality everywhere you roam the museum
+   (era rooms + rotunda) so you can wander and still hear the whole track. It
+   only fades/muddies once you step back into the entrance HALLWAY (room "ent"),
+   getting quieter step by step as you head out toward the street. */
 
 const songEls = {};        // id -> {el, node}
 let current = null;        // {id, room}
@@ -72,7 +73,9 @@ function stop() {
 }
 function applyDistance(hard) {
   if (!ctx || !current) return;
-  const d = current.room === curRoom ? 0 : Math.min(7, 1 + Math.max(0, curDepth));
+  // full in every gallery + the rotunda; muffled only in the hallway ("ent"),
+  // deeper toward the street = more muffled.
+  const d = curRoom === "ent" ? Math.min(7, Math.max(1, curDepth || 1)) : 0;
   const gains = [1, 0.5, 0.36, 0.26, 0.18, 0.12, 0.08, 0.05];
   const lpfs = [19000, 2200, 1500, 1000, 700, 480, 330, 230];
   const t = ctx.currentTime, T = hard ? 0.05 : 0.9;
