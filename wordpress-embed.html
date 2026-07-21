@@ -1,0 +1,40 @@
+<!-- ============================================================
+     the [retrospective] museum — clay and kelsy
+     Paste this WHOLE block into a WordPress "Custom HTML" block.
+     One block. No plugins, no PHP.
+
+     • Full-bleed, full-height immersive iframe.
+     • allow="camera; microphone" lets the mirror room use the
+       webcam (the dithered reflection + slide-camera photo).
+     • The museum messages the parent on every light/dark room
+       change; the script repaints the page so the iOS status bar
+       + toolbar match the room you're standing in.
+     • Leaving the museum (walk to the end of the road →
+       "go back to clayandkelsy.com?") navigates this top page.
+     ============================================================ -->
+<style>
+  html, body { background: #101010 !important; transition: none !important; }
+</style>
+<div id="retro-embed" style="position:relative;width:100vw;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;height:100svh;height:100dvh;background:#101010;overflow:hidden;">
+  <iframe
+    src="https://clayburton.github.io/retrospective-museum/"
+    title="the [retrospective] museum — clay and kelsy"
+    loading="lazy"
+    allow="camera; microphone; autoplay; fullscreen; gyroscope; accelerometer"
+    style="position:absolute;inset:0;width:100%;height:100%;border:0;display:block;">
+  </iframe>
+</div>
+<script>
+(function () {
+  var wrap = document.getElementById('retro-embed');
+  window.addEventListener('message', function (e) {
+    if (e.origin !== 'https://clayburton.github.io') return;   // only trust the museum
+    var d = e.data;
+    if (!d || d.retro !== 'bg' || typeof d.color !== 'string') return;
+    if (!/^#[0-9a-fA-F]{3,8}$/.test(d.color)) return;          // colors only
+    document.documentElement.style.setProperty('background', d.color, 'important');
+    document.body.style.setProperty('background', d.color, 'important');
+    if (wrap) wrap.style.setProperty('background', d.color, 'important');
+  });
+}());
+</script>
