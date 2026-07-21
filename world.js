@@ -71,7 +71,8 @@ function loadImg(name) {
 }
 ["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-lamp-mask","el-bat1","el-bat2",
  "el-eye1","el-eye2","el-eye3","el-eye4","el-eye5","el-eye6",
- "el-hpic2b","el-hpic2c"].forEach(loadImg);
+ "el-hpic2b","el-hpic2c",
+ "el-fish1","el-fish2","el-fish3","el-fish4"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
 const SAVE_K = "retro.state";
@@ -317,6 +318,52 @@ function twinkleStars(ctx, t) {
   ctx.restore();
 }
 
+/* ---- the fisherman on the moon (facade) ----
+   Four frames cut on exact 627px boundaries, so they're in register by
+   construction — never crop them per-frame or he'll jitter between poses.
+   Sprite landmarks, measured once in frame coords: his seat (the bottom of the
+   sitting figure) is at (276, 315) of 627, so seating him is just arithmetic. */
+/* Measured off the art by scanning for the widest bright run: the disc is 210
+   across with its top edge at y71, so it's a circle of r105 centred here. (A
+   cloud band crosses its lower half, which is what fooled an earlier read.) */
+const MOON = { cx: 1281, cy: 176, r: 105 };
+/* The moon sits only ~70px below the top of the card, so there's no headroom to
+   perch him ABOVE it at any readable size — his rod clips straight off the edge.
+   He's inscribed IN the disc instead, which reads as cut-paper silhouette and
+   lets him be big enough to see. Sized so his head grazes the top of the moon
+   and the ripple sits near the bottom; ink spans y78..548 of the 627 frame. */
+const FISH = { sz: 276, x: 1143, y: 38 };
+const FISH_X = () => FISH.x;
+const FISH_Y = () => FISH.y;
+const FISH_SEQ = [[2, 300], [3, 320], [4, 900]];         // frame, ms — the catch
+const FISH_MS  = FISH_SEQ.reduce((a, b) => a + b[1], 0);
+const FISH_FADE = 800;                                    // he dithers into being
+
+function drawFisher(ctx, S, t) {
+  const st = S.st;
+  if (!st.fishT0) return;
+  const e = t - st.fishT0;
+  let frame = 1, alpha = 1;
+  if (st.fishState === 2) {                 // reeling a star up out of the moon
+    let k = e;
+    frame = 4;
+    for (const [f, d] of FISH_SEQ) { if (k < d) { frame = f; break; } k -= d; }
+    // NB: the return to sitting is driven by a wall clock in moonFish, never from
+    // here — a stalled render must not be able to strand him mid-catch
+  } else {                                   // sitting — fading in on arrival
+    alpha = Math.min(1, e / FISH_FADE);
+  }
+  const im = "el-fish" + frame;
+  const X = FISH_X(), Y = FISH_Y(), Z = FISH.sz;
+  ctx.save();
+  ctx.globalAlpha = alpha;                   // partial alpha → the shader dithers him in
+  elemWhite(ctx, im, X, Y, Z, Z);            // white against the night sky
+  // ...but he'd vanish where he overlaps the bright moon, so re-ink that part
+  ctx.beginPath(); ctx.arc(MOON.cx, MOON.cy, MOON.r, 0, 7); ctx.clip();
+  elem(ctx, im, X, Y, Z, Z);
+  ctx.restore();
+}
+
 /* text under the pictures reads small on a phone — nudge it up when the
    square is being squeezed onto a narrow screen */
 function mobK(S) { return (S && S.cssW && S.cssW < 760) ? 1.28 : 1; }
@@ -434,9 +481,11 @@ const cards = {
       { r:[600,760,340,320], cur:"fwd", go:"hall-1", t:"dissolve", spd:"slow" },
       { r:[280,470,700,150], cur:"hand", sfx:"knock" },
       { r:[1000,1160,460,300], cur:"hand", fn:"grassMouse" },
+      { r:[1156,52,250,196], cur:"hand", fn:"moonFish" },      // the moon
     ],
     draw(ctx,H,S,t){
       twinkleStars(ctx, t);                       // the sky breathes
+      drawFisher(ctx, S, t);                      // whoever's up there tonight
       // RETROSPECTIVE lettered onto the drawn blank frieze band
       H.type(ctx,"RETROSPECTIVE", 762, 566, { cells:10, align:"center", color:"#101010", plain:true, seed:5, spacing:0.08 });
       H.type(ctx,"clay and kelsy", 762, 604, { cells:4.6, align:"center", color:"#101010", plain:true, seed:9 });
@@ -866,6 +915,27 @@ const ACTIONS = {
       ctx.drawImage(cv, x, y);
     }, ()=>{ st.ufoFlying=0; st.starsOut=1; starsBg(true); S.A.dirty=true; H.sfx("musicbox"); });
   },
+  /* somebody fishes off the moon. First poke sits him down, the next lands a star. */
+  moonFish(hot,H,S){
+    const st = S.st, now = performance.now();
+    if (!st.fishT0) {                        // nobody up there yet — he dithers into being
+      st.fishState = 1; st.fishT0 = now;
+      H.sfx("musicbox");
+      S.A.dirty = true; return;
+    }
+    if (st.fishState === 2) { H.sfx("tickSoft"); return; }   // mid-catch, let him work
+    st.fishState = 2; st.fishT0 = now;       // give the line a tug
+    H.sfx("flap"); setTimeout(()=>H.sfx("ding"), 520);
+    // settle back to sitting on a wall clock, so a throttled tab can't strand
+    // him mid-catch (the same rule as the placard type-on and the light dip)
+    setTimeout(()=>{
+      if (S.st.fishState !== 2) return;
+      S.st.fishState = 1; S.st.fishT0 = performance.now() - FISH_FADE;
+      S.A.dirty = true; window.__mus && window.__mus.renderOnce();
+    }, FISH_MS + 40);
+    S.A.dirty = true;
+  },
+
   // the storm grate in the road — something drops away underneath
   streetGrate(hot,H,S){ H.sfx("sinkhole"); },
   // walk off the end of the road → leave the experience (navigates the TOP frame when embedded)
