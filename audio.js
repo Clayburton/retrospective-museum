@@ -101,38 +101,8 @@ function noiseBuffer(sec, brown) {
   }
   return b;
 }
-/* a loopable bed of soft night crickets — scattered gated high chirps */
-function cricketBuffer(sec) {
-  const sr = ctx.sampleRate, n = Math.floor(sr * sec);
-  const b = ctx.createBuffer(1, n, sr), ch = b.getChannelData(0);
-  const nChirps = Math.round(sec * 2.4);
-  for (let c = 0; c < nChirps; c++) {
-    const carrier = 4150 + Math.random() * 950;      // chirp pitch
-    const trem = 26 + Math.random() * 18;            // pulse (trill) rate
-    const dur = 0.13 + Math.random() * 0.18;
-    const amp = 0.20 + Math.random() * 0.14;
-    const s0 = Math.floor((Math.random() * (sec - 0.6) + 0.15) * sr);
-    const len = Math.floor(dur * sr);
-    for (let i = 0; i < len && s0 + i < n; i++) {
-      const t = i / sr, k = i / len;
-      const envA = Math.sin(Math.PI * k);            // soft in/out over the chirp
-      const pulse = 0.5 + 0.5 * Math.sin(2 * Math.PI * trem * t);
-      const gate = pulse > 0.4 ? 1 : 0;              // chirp-chirp-chirp trill
-      ch[s0 + i] += Math.sin(2 * Math.PI * carrier * t) * envA * pulse * gate * amp;
-    }
-  }
-  return b;
-}
 function mkAmbient(def) {
   const g = ctx.createGain(); g.gain.value = 0; g.connect(master);
-  // gentle night crickets (outdoor beds only)
-  if (def.crickets) {
-    const cs = ctx.createBufferSource(); cs.buffer = cricketBuffer(4.3); cs.loop = true;
-    const cf = ctx.createBiquadFilter(); cf.type = "bandpass"; cf.frequency.value = 4600; cf.Q.value = 2.4;
-    const cg = ctx.createGain(); cg.gain.value = def.crickets;
-    cs.connect(cf); cf.connect(cg); cg.connect(g);
-    cs.start();
-  }
   // filtered brown-noise bed
   const src = ctx.createBufferSource();
   src.buffer = noiseBuffer(3.1, true); src.loop = true;
@@ -159,8 +129,8 @@ function mkAmbient(def) {
 }
 function buildAmbients() {
   const defs = {
-    street: { lpf: 240,  noise: 0.55, hum: 0,   vol: 0.16, crickets: 0.9 },
-    lamp:   { lpf: 200,  noise: 0.30, hum: 118, humGain: 0.014, whine: 2340, whineGain: 0.006, vol: 0.14, crickets: 0.9 },
+    street: { lpf: 240,  noise: 0.55, hum: 0,   vol: 0.16 },
+    lamp:   { lpf: 200,  noise: 0.30, hum: 118, humGain: 0.014, whine: 2340, whineGain: 0.006, vol: 0.14 },
     dark:   { lpf: 120,  noise: 0.40, hum: 0,   vol: 0.10 },
     hall:   { lpf: 420,  noise: 0.30, hum: 100, humGain: 0.020, vol: 0.14 },
     rot:    { lpf: 700,  noise: 0.22, hum: 60,  humGain: 0.010, vol: 0.12 },
@@ -249,17 +219,29 @@ const SFX = {
   stamp()    { burst(0.06, 0.6, 300, "lowpass"); tone(72, "sine", 0.10, 0.5, 0, 46); },
   rattle()   { for (let i = 0; i < 3; i++) burst(0.03, 0.3, 900 + i*180, "bandpass", i * 0.07); },
   thunk()    { tone(64, "sine", 0.30, 0.22, 0, 40); burst(0.05, 0.10, 240, "lowpass"); },
-  buzz()     { // the light dips: low electrical shudder with a few crackles, barely there
+  buzz()     { // the light dips: low electrical shudder with crackles
                const t0 = ctx.currentTime;
                const o = ctx.createOscillator(); o.type = "sawtooth"; o.frequency.value = 52;
-               const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 240;
+               const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 300;
                const g = ctx.createGain();
                g.gain.setValueAtTime(0.0001, t0);
-               g.gain.linearRampToValueAtTime(0.016, t0 + 0.16);
-               g.gain.setValueAtTime(0.016, t0 + 1.0);
+               g.gain.linearRampToValueAtTime(0.075, t0 + 0.14);
+               g.gain.setValueAtTime(0.075, t0 + 1.0);
                g.gain.exponentialRampToValueAtTime(0.0003, t0 + 1.4);
                o.connect(f); f.connect(g); g.connect(sfxBus); o.start(t0); o.stop(t0 + 1.5);
-               for (const w of [0.12, 0.37, 0.55, 0.86, 1.04]) burst(0.012, 0.04, 900, "bandpass", w); },
+               for (const w of [0.12, 0.37, 0.55, 0.86, 1.04]) burst(0.014, 0.20, 900, "bandpass", w); },
+  sinkhole() { // the grate: a hollow drop into somewhere deep under the street
+               const t0 = ctx.currentTime;
+               const o = ctx.createOscillator(); o.type = "sine";
+               o.frequency.setValueAtTime(190, t0); o.frequency.exponentialRampToValueAtTime(26, t0 + 1.5);
+               const g = ctx.createGain(); env(g, t0, 0.05, 0.20, 1.6);
+               o.connect(g); g.connect(sfxBus); o.start(t0); o.stop(t0 + 1.8);
+               const n = ctx.createBufferSource(); n.buffer = noiseBuffer(1.7, true);
+               const nf = ctx.createBiquadFilter(); nf.type = "bandpass"; nf.Q.value = 3.5;
+               nf.frequency.setValueAtTime(760, t0); nf.frequency.exponentialRampToValueAtTime(85, t0 + 1.5);
+               const ng = ctx.createGain(); env(ng, t0, 0.04, 0.13, 1.5);
+               n.connect(nf); nf.connect(ng); ng.connect(sfxBus); n.start(t0); n.stop(t0 + 1.7);
+               for (const w of [0, 0.06, 0.13]) burst(0.03, 0.18, 620, "bandpass", w); },
   ring()     { for (const w of [0, 0.07, 0.14, 0.21, 0.28, 0.35]) { tone(1050, "sine", 0.05, 0.10, w); tone(1382, "sine", 0.05, 0.10, w + 0.035); } },
   flap()     { for (let i = 0; i < 3; i++) burst(0.04, 0.22 - i*0.05, 600 - i*120, "bandpass", i * 0.11); },
   hiss()     { burst(1.1, 0.06, 5200, "highpass"); },

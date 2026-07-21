@@ -12,9 +12,14 @@ import { dirname, join } from "path";
 const dir = dirname(fileURLToPath(import.meta.url));
 
 // --- shims so world.js runs headless -------------------------------------
-global.window = {};
+global.window = { addEventListener(){}, removeEventListener(){} };
 global.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
-global.document = { getElementById: () => null, body: { classList: { add(){}, remove(){} } } };
+const stubCtx = new Proxy({}, { get: () => () => stubCtx });
+global.document = {
+  getElementById: () => null,
+  createElement: () => ({ width: 0, height: 0, style: {}, getContext: () => stubCtx }),
+  body: { classList: { add(){}, remove(){} }, style: {} },
+};
 global.Image = class { set src(v) {} };
 global.performance = { now: () => 0 };
 

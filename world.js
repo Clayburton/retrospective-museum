@@ -103,15 +103,71 @@ function elem(ctx, name, x, y, w, h) {          // draw a transparent art elemen
 function elemInvert(ctx, name, x, y, w, h) {    // draw a WHITE element (el-straysky is already white)
   elem(ctx, name, x, y, w, h);
 }
+/* draw a DARK-ink element recoloured to paper-white — el-ufo is black line art,
+   which is invisible against the night sky unless we flip it. Cached per element. */
+const WHITE_CV = {};
+function elemWhite(ctx, name, x, y, w, h) {
+  const im = IMG[name]; if (!im || !im.complete || !im.naturalWidth) return;
+  let c = WHITE_CV[name];
+  if (!c) {
+    c = document.createElement("canvas");
+    c.width = im.naturalWidth; c.height = im.naturalHeight;
+    const g = c.getContext("2d");
+    g.drawImage(im, 0, 0);
+    g.globalCompositeOperation = "source-in";      // keep alpha, replace colour
+    g.fillStyle = "rgb(244,240,228)"; g.fillRect(0, 0, c.width, c.height);
+    WHITE_CV[name] = c;
+  }
+  const s = Math.min(w / c.width, h / c.height);
+  ctx.drawImage(c, x + (w - c.width*s)/2, y + (h - c.height*s)/2, c.width*s, c.height*s);
+}
+/* the stray sky, filling EVERY dark part of the card (above the road and to both
+   sides of it) — masked by the master's own darkness so no stars land on the road. */
+let STAR_CV = null, STAR_FOR = null;
+function starfield(H, S) {
+  if (STAR_CV && STAR_FOR === S.cur) return STAR_CV;
+  const im = IMG["el-straysky"];
+  if (!im || !im.complete || !im.naturalWidth) return null;
+  if (!S.bgSample) return null;                    // master not sampled yet — don't cache a blank
+  const c = document.createElement("canvas"); c.width = M; c.height = M;
+  const g = c.getContext("2d");
+  const th = M * im.naturalHeight / im.naturalWidth;
+  for (let y = 0; y < M; y += th) g.drawImage(im, 0, y, M, th);   // tile down to fill the square
+  // mask: keep stars only where the artwork is dark
+  const mk = document.createElement("canvas"); mk.width = 96; mk.height = 96;
+  const mg = mk.getContext("2d");
+  const id = mg.createImageData(96, 96);
+  for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++) {
+    const b = H.sampleBg((x + 0.5) / 96 * M, (y + 0.5) / 96 * M);
+    const a = b < 0.30 ? 255 : b < 0.46 ? Math.round((0.46 - b) / 0.16 * 255) : 0;
+    const i = (y * 96 + x) * 4;
+    id.data[i] = id.data[i+1] = id.data[i+2] = 255; id.data[i+3] = a;
+  }
+  mg.putImageData(id, 0, 0);
+  g.globalCompositeOperation = "destination-in";
+  g.drawImage(mk, 0, 0, M, M);
+  g.globalCompositeOperation = "source-over";
+  STAR_CV = c; STAR_FOR = S.cur;
+  return c;
+}
 /* ceiling-lamp click targets — [x,y] centres of each room's fixtures (master coords) */
 function bulbHots(pts) {
   return pts.map(p => ({ r:[p[0]-66, p[1]-66, 132, 132], cur:"hand", fn:"bulbDip" }));
 }
 function starsBg(on) {                          // fill the WHOLE window (letterbox bars too) with stars
-  document.body.style.backgroundImage = on ? `url(${V}el-straysky.png?av=9)` : "";
-  document.body.style.backgroundSize = "cover";
-  document.body.style.backgroundPosition = "center";
+  const b = document.body.style;
+  b.backgroundImage = on ? `url(${V}el-straysky.png?av=9)` : "";
+  if (!on) return;
+  // match the card's on-screen star scale so the bars and the card read as one sky
+  const st = document.getElementById("stage");
+  const w = st ? st.clientWidth : 0;              // the master square's displayed width
+  b.backgroundSize = w ? w + "px auto" : "cover";
+  b.backgroundPosition = "center";
+  b.backgroundRepeat = "repeat";
 }
+window.addEventListener("resize", () => {         // keep the bar stars matched as the window changes
+  if (document.body.style.backgroundImage) starsBg(true);
+});
 function roomTitle(ctx, H, label, seed) {
   const y = 236;
   // pick white on a dark wall, black on a light wall (auto-contrast across its width)
@@ -152,25 +208,30 @@ const cards = {
     hots:[
       { r:[0,0,1536,760], cur:"hand", fn:"skyUFO" },
       { r:[950,250,230,240], cur:"hand", fn:"streetLight" },
-      { r:[540,780,460,380], cur:"fwd", exitZone:true, fn:"leaveMuseum" },   // the end of the road → leave
+      { r:[688,1116,160,124], cur:"hand", fn:"streetGrate" },                // the storm grate in the road
+      { r:[540,780,460,300], cur:"fwd", exitZone:true, fn:"leaveMuseum" },   // the end of the road → leave
     ],
     after(H,S){ if (S.st.starsOut) starsBg(true); },
     leave(H,S){ starsBg(false); },
     draw(ctx,H,S,t){
       const st=S.st;
-      if (st.starsOut) { elemInvert(ctx,"el-straysky", 40,40,1456,660); }
+      if (st.starsOut) { const sf=starfield(H,S); if (sf) ctx.drawImage(sf,0,0); }
       if (!st.lampOut) {                         // glow at the drawn lamp head (top-right)
         const lx=1035, ly=345;
         const lg=ctx.createRadialGradient(lx,ly,4,lx,ly,120); lg.addColorStop(0,"rgba(244,240,228,0.9)"); lg.addColorStop(1,"rgba(244,240,228,0)");
         ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(lx,ly,120,0,7); ctx.fill();
         const cg=ctx.createLinearGradient(0,345,0,1160); cg.addColorStop(0,"rgba(238,234,222,0.16)"); cg.addColorStop(1,"rgba(238,234,222,0.01)");
         ctx.fillStyle=cg; ctx.beginPath(); ctx.moveTo(1000,360); ctx.lineTo(760,1160); ctx.lineTo(1200,1160); ctx.closePath(); ctx.fill();
+      } else {
+        // lamp out — the whole street actually goes dark (the art's lamp is lit, so we cover it)
+        ctx.fillStyle="rgba(6,6,8,0.72)"; ctx.fillRect(0,0,M,M);
       }
-      if (st.ufoAt && t < st.ufoAt) {}          // ufo drawn by its anim
       H.type(ctx,"the museum is behind you", 768, 1500, { cells:3.2, align:"center", alpha:0.28, color:"#8a867c", plain:true });
       // the way out — painted on the road at the end of it; brightens when you hover the end
       const leaving = S.hover && S.hover.exitZone;
-      H.type(ctx,"go back to clayandkelsy.com?", 768, 1130, { cells:5, align:"center", plain:true, color:"#171717", alpha: leaving?0.96:0.4 });
+      const dark = !!st.lampOut;
+      H.type(ctx,"go back to clayandkelsy.com?", 768, 1130,
+        { cells:7, align:"center", plain:true, color: dark?"#e8e4d6":"#171717", alpha: leaving?0.96:0.42 });
     },
   },
 
@@ -245,7 +306,7 @@ const cards = {
 
   "y17a": { id:"y17a", img:V+"gallery-mh.png", tone:"ink", room:"y17", ambient:"room",
     nav:{ right:"y17b", back:"rotunda" }, frames:[{ song:"no-good-reason", r:[402,564,246,276], plate:[485,966,82,30] },{ song:"currently-alone", r:[954,564,228,276], plate:[1026,966,83,30] }],
-    hots:[ { r:[1280,1120,120,110], cur:"zoom", go:"mh-zoom1", t:"zoomOpen", spd:"fast", at:[1340,1170] },
+    hots:[ { r:[1280,1120,120,110], cur:"zoom", go:"mh-zoom1", t:"zoomOpen", spd:"fast", at:[1340,1170], sfx:"squeak" },
            ...bulbHots([[355,90],[1180,90]]) ],
     draw(ctx,H,S,t){ roomTitle(ctx,H,"2017",71); } },
 
@@ -286,11 +347,11 @@ const cards = {
     id:"mousehole", img:V+"mousehole.png", tone:"ink", room:"y17", ambient:"room",
     nav:{ back:"y17a" },
     hots:[
-      { r:[790,400,280,220], cur:"listen", fn:"mouseSqueak" },
-      { r:[660,1030,360,300], cur:"key", fn:"takeKey" },
+      { r:[810,700,250,180], cur:"listen", fn:"mouseSqueak" },   // the mouse curled up in the dark
+      { r:[660,1030,360,300], cur:"hand", fn:"takeKey" },
     ],
     draw(ctx,H,S,t){
-      if (!S.st.hasKey){
+      if (!S.st.hasKey && S.st.keyShown){
         // the key rests on the lit floor, exactly where the pick-up animation lifts it from
         elem(ctx,"el-key", 690, 1095, 280, 180);
         H.type(ctx,"the janitor's key", 830, 1300, {cells:2.8,align:"center",color:"#101010",plain:true});
@@ -419,18 +480,22 @@ const ACTIONS = {
     st.ufoFlying=1; H.sfx("whisper");
     H.anim("street", 3000, (ctx,k)=>{
       const x = -300 + k*2100, y = 240 + Math.sin(k*3.14)*(-60);
-      elem(ctx,"el-ufo", x, y, 360, 118);
+      elemWhite(ctx,"el-ufo", x, y, 360, 118);   // black line art → white, or it's invisible up there
     }, ()=>{ st.ufoFlying=0; st.starsOut=1; starsBg(true); S.A.dirty=true; H.sfx("musicbox"); });
   },
+  // the storm grate in the road — something drops away underneath
+  streetGrate(hot,H,S){ H.sfx("sinkhole"); },
   // walk off the end of the road → leave the experience (navigates the TOP frame when embedded)
   leaveMuseum(hot,H,S){
     H.sfx("creakDoor");
     const url = "https://clayandkelsy.com";
     setTimeout(()=>{ try { window.top.location.href = url; } catch(e){ window.location.href = url; } }, 160);
   },
-  streetLight(hot,H,S){
-    if (S.st.lampOut){ H.sfx("tickSoft"); return; }
-    S.st.lampOut=1; H.sfx("buzz"); window.AUDIO.ambient("dark"); S.A.dirty=true;
+  streetLight(hot,H,S){                 // toggle the streetlamp — the whole street goes dark, and back
+    S.st.lampOut = S.st.lampOut ? 0 : 1;
+    H.sfx("buzz");
+    window.AUDIO.ambient(S.st.lampOut ? "dark" : "lamp");
+    S.A.dirty=true;
   },
 
   /* rotunda flower */
@@ -443,9 +508,22 @@ const ACTIONS = {
   /* hallway picture zoom */
   toFrame(hot,H,S){ S.st.hframePic = hot.pic; H.go("hframe",{ t:"zoomOpen", spd:"fast" }); },
 
-  /* mouse hole */
-  mouseSqueak(hot,H){ H.sfx("squeak"); },
+  /* mouse hole — poke the mouse and it drops what it was sitting on */
+  mouseSqueak(hot,H,S){
+    H.sfx("squeak");
+    if (S.st.keyShown || S.st.hasKey) return;
+    S.st.keyShown = 1;                                  // startled — the janitor's key is under it
+    setTimeout(()=>H.sfx("keys"), 240);
+    H.anim("mousehole", 620, (ctx,k)=>{                 // it skitters off to the right
+      ctx.fillStyle="rgb(20,20,18)"; ctx.globalAlpha=1-k*0.85;
+      const x=930+k*430, y=795+Math.sin(k*30)*4;
+      ctx.beginPath(); ctx.ellipse(x,y,42,22,0.04,0,7); ctx.fill();
+      ctx.beginPath(); ctx.arc(x+30,y-6,17,0,7); ctx.fill();
+    }, ()=>{ S.A.dirty=true; });
+    S.A.dirty=true;
+  },
   takeKey(hot,H,S){
+    if (!S.st.keyShown){ H.sfx("tickSoft"); return; }    // nothing there until the mouse moves
     if (S.st.hasKey){ H.sfx("tickSoft"); return; }
     S.st.hasKey=1; H.sfx("keys"); setTimeout(()=>H.sfx("squeak"),200);
     H.anim("mousehole", 900, (ctx,k)=>{ ctx.save(); ctx.globalAlpha=1-k; ctx.translate(830,1185-k*160); ctx.rotate(k*0.6);
