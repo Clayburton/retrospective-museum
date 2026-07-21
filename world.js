@@ -420,13 +420,13 @@ const cards = {
     nav:{ back:"y17a" },
     hots:[
       { r:[810,700,250,180], cur:"listen", fn:"mouseSqueak" },   // the mouse curled up in the dark
-      { r:[660,1030,360,300], cur:"hand", fn:"takeKey" },
+      { r:[660,880,360,300], cur:"hand", fn:"takeKey" },
     ],
     draw(ctx,H,S,t){
       if (!S.st.hasKey && S.st.keyShown){
-        // the key rests on the lit floor, exactly where the pick-up animation lifts it from
-        elem(ctx,"el-key", 690, 1095, 280, 180);
-        H.type(ctx,"the janitor's key", 830, 1300, {cells:2.8,align:"center",color:"#101010",plain:true});
+        // the key lies just below the mouse, exactly where the pick-up animation lifts it from
+        elem(ctx,"el-key", 690, 945, 280, 180);
+        H.type(ctx,"the janitor's key", 830, 1150, {cells:2.8,align:"center",color:"#101010",plain:true});
       }
     },
   },
@@ -646,7 +646,7 @@ const ACTIONS = {
     if (!S.st.keyShown){ H.sfx("tickSoft"); return; }    // nothing there until the mouse moves
     if (S.st.hasKey){ H.sfx("tickSoft"); return; }
     S.st.hasKey=1; H.sfx("keys"); setTimeout(()=>H.sfx("squeak"),200);
-    H.anim("mousehole", 900, (ctx,k)=>{ ctx.save(); ctx.globalAlpha=1-k; ctx.translate(830,1185-k*160); ctx.rotate(k*0.6);
+    H.anim("mousehole", 900, (ctx,k)=>{ ctx.save(); ctx.globalAlpha=1-k; ctx.translate(830,1035-k*160); ctx.rotate(k*0.6);
       const s=1+k*1.4; elem(ctx,"el-key",-140*s,-90*s,280*s,180*s); ctx.restore(); });
     S.A.dirty=true;
   },
