@@ -273,6 +273,40 @@ function mirrorCv() {
   return MIRROR_CV;
 }
 
+/* ---- the night sky over the facade. The art's own stars are fixed; these breathe. ---- */
+const SKY_STARS = (() => {
+  let s = 20130722;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  const out = [];
+  const clearOfBuilding = (x, y) => !(x > 340 && x < 1200 && y > 175);
+  let guard = 0;
+  while (out.length < 15 && guard++ < 400) {
+    const x = 50 + rnd() * 1440, y = 26 + rnd() * 300;
+    if (clearOfBuilding(x, y)) out.push({ x, y, r: 2.8 + rnd() * 3.2, sp: 0.6 + rnd() * 1.9, ph: rnd() * 6.283 });
+  }
+  for (let i = 0; i < 5; i++) {                       // a few down the dark margins
+    const x = rnd() < 0.5 ? 34 + rnd() * 150 : 1352 + rnd() * 150;
+    out.push({ x, y: 340 + rnd() * 500, r: 2.6 + rnd() * 2.8, sp: 0.6 + rnd() * 1.9, ph: rnd() * 6.283 });
+  }
+  return out;
+})();
+function twinkleStars(ctx, t) {
+  const s = t / 1000;
+  ctx.save();
+  ctx.fillStyle = "rgb(250,247,239)";
+  for (const st of SKY_STARS) {
+    const k = 0.5 + 0.5 * Math.sin(s * st.sp + st.ph);
+    if (k < 0.12) continue;                           // some wink out entirely
+    const r = st.r * (0.42 + 0.78 * k);
+    ctx.beginPath(); ctx.arc(st.x, st.y, r, 0, 7); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* text under the pictures reads small on a phone — nudge it up when the
+   square is being squeezed onto a narrow screen */
+function mobK(S) { return (S && S.cssW && S.cssW < 760) ? 1.28 : 1; }
+
 /* ceiling-lamp click targets — [x,y] centres of each room's fixtures (master coords) */
 function bulbHots(pts) {
   return pts.map(p => ({ r:[p[0]-66, p[1]-66, 132, 132], cur:"hand", fn:"bulbDip" }));
@@ -380,7 +414,7 @@ const cards = {
 
   /* ---- facade ---- */
   "facade": {
-    id:"facade", img:V+"facade.png", tone:"ink", room:"ent", ambient:"street", depth:5,
+    id:"facade", img:V+"facade.png", tone:"ink", room:"ent", ambient:"street", depth:5, live:true,
     nav:{ fwd:"hall-1", back:"street" },
     hots:[
       { r:[600,760,340,320], cur:"fwd", go:"hall-1", t:"dissolve", spd:"slow" },
@@ -388,6 +422,7 @@ const cards = {
       { r:[1000,1160,460,300], cur:"hand", fn:"grassMouse" },
     ],
     draw(ctx,H,S,t){
+      twinkleStars(ctx, t);                       // the sky breathes
       // RETROSPECTIVE lettered onto the drawn blank frieze band
       H.type(ctx,"RETROSPECTIVE", 762, 566, { cells:10, align:"center", color:"#101010", plain:true, seed:5, spacing:0.08 });
       H.type(ctx,"clay and kelsy", 762, 604, { cells:4.6, align:"center", color:"#101010", plain:true, seed:9 });
@@ -1008,15 +1043,18 @@ function build(H){
       hots:[ { r:[0,0,M,M], cur:"hand", fn:"plaqueClick", wall:wallId } ],
       enter(H2,S){ S.typeOn={ text:song.blurb, t0:performance.now(), cps:46, chars:0, done:false, skip:false, _tick:0 }; },
       draw(ctx,H2,S,t){
-        H2.type(ctx,"no. "+song.n, 768, 430, {cells:4.5,align:"center",alpha:0.9,color:"#101010",plain:true,seed:200+song.n});
-        H2.type(ctx,song.title, 768, 530, {cells:13,align:"center",color:"#101010",plain:true,seed:210+song.n,spacing:0.06});
-        H2.type(ctx,song.date, 768, 590, {cells:5,align:"center",alpha:1,color:"#101010",plain:true,seed:220+song.n});
+        const k = mobK(S);                       // the whole placard reads bigger on a phone
+        H2.type(ctx,"no. "+song.n, 768, 430, {cells:4.5*k,align:"center",alpha:0.9,color:"#101010",plain:true,seed:200+song.n});
+        H2.type(ctx,song.title, 768, 530, {cells:13*Math.min(k,1.14),align:"center",color:"#101010",plain:true,seed:210+song.n,spacing:0.06});
+        H2.type(ctx,song.date, 768, 590, {cells:5*k,align:"center",alpha:1,color:"#101010",plain:true,seed:220+song.n});
         ctx.fillStyle="rgba(16,16,16,0.5)"; ctx.fillRect(560,620,416,3);
         const T=S.typeOn; if(T){ const chars=T.skip?1e9:T.chars;
           if(!T.skip && chars>T._tick+4){ T._tick=chars; H2.sfx("tickSoft"); }
-          const r=H2.wrap(ctx,T.text,300,700,{cells:6.5,maxW:960,lh:1.7,chars,color:"#101010",plain:true,seed:230+song.n});
+          // a wider column too, so the bigger type still gets a full line of words
+          const r=H2.wrap(ctx,T.text,768-(k>1?520:480),700,
+                          {cells:6.5*k,maxW:(k>1?1040:960),lh:1.7,chars,color:"#101010",plain:true,seed:230+song.n});
           T.done=r.done;
-          if(T.done) H2.type(ctx,"· click to return ·", 768, 1200, {cells:4,align:"center",alpha:0.6,color:"#101010",plain:true,seed:240});
+          if(T.done) H2.type(ctx,"· click to return ·", 768, 1240, {cells:4*k,align:"center",alpha:0.6,color:"#101010",plain:true,seed:240});
         }
       },
     };

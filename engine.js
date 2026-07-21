@@ -658,6 +658,10 @@ function hitAt(x, y) {
   const nav = card.nav || {};
   const bx = S.view.w * P.navBand, by = S.view.h * P.navBand;
   const inX = x - S.view.x, inY = y - S.view.y;
+  // the empty letterbox UNDER the square steps back too — that band is where a
+  // thumb naturally lands on a phone, and it's otherwise dead space
+  if (inY > S.view.h && nav.back)
+    return { cur: "back", go: nav.back, t: "dissolve", spd: "fast", edge: 1 };
   if (inX < 0 || inY < 0 || inX > S.view.w || inY > S.view.h) return null;
   if (nav.left  && inX < bx)            return { cur: "left",  go: nav.left,  t: "scroll", dir: [-1, 0], edge: 1 };
   if (nav.right && inX > S.view.w - bx) return { cur: "right", go: nav.right, t: "scroll", dir: [1, 0],  edge: 1 };
