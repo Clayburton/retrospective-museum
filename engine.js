@@ -428,7 +428,10 @@ const H = {
       yy += lh;
       if (n > lim) break;
     }
-    return { done: n >= totalLen(lines), y: yy };
+    // done only when the type-on budget actually covers ALL the text — NOT `n`,
+    // which over-counts (it adds each line's full length even when the last line
+    // was only partially drawn), flipping done true while text is still typing.
+    return { done: lim >= totalLen(lines), y: yy };
     function totalLen(ls) { return ls.reduce((a, b) => a + b.length + 1, 0) - 1; }
   },
   paper(ctx, x, y, w, h2, shade = 0.94) {
@@ -486,6 +489,19 @@ function needsLive() {
             S.flickAnim || (S.A && (S.A.card.live || hasNavArrows(S.A.card))));
 }
 function wake() { if (!S.raf && !S.frozen) loop(); }
+/* type-on watchdog: rAF is throttled inside the WP cross-origin iframe and in
+   background tabs, which strands the placard typewriter mid-sentence. A wall-clock
+   interval force-draws it to completion no matter what rAF does. (Same "never rely
+   on rAF alone" rule as the transition watchdog.) */
+function armTypeWatchdog() {
+  clearInterval(S.typeTimer); S.typeTimer = 0;
+  if (!S.typeOn || S.typeOn.done || S.frozen) return;
+  S.typeTimer = setInterval(() => {
+    if (!S.typeOn || S.typeOn.done || S.frozen) { clearInterval(S.typeTimer); S.typeTimer = 0; return; }
+    S.A && (S.A.dirty = true); S.B && (S.B.dirty = true);
+    render();
+  }, 33);
+}
 function loop() {
   S.raf = requestAnimationFrame(() => { S.raf = 0; render(); if (needsLive()) loop(); });
 }
@@ -590,6 +606,7 @@ function go(id, opt = {}) {
       target: id, opt,
     };
     wake();
+    armTypeWatchdog();                            // placard type-on can't depend on rAF (iframe throttling)
     // watchdog: a throttled tab can stall rAF mid-transition with the lock held
     setTimeout(() => { if (S.trans && S.trans.frozen == null) render(); }, S.trans.dur + 120);
   });
@@ -845,6 +862,7 @@ function boot() {
     S.A = { card, dyn: mkDyn(card), dirty: true };
     S.cur = start;
     card.enter && card.enter(H, S);
+    armTypeWatchdog();
     drawDyn(S.A, performance.now());
     resize();
     READY = true;
