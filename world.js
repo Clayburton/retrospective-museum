@@ -994,11 +994,12 @@ const ACTIONS = {
 };
 
 /* ========================================================== GUEST BOOK == */
-/* Where the guest book lives. "/gb" = the local tools/serve.py only — on a static
-   host (GitHub Pages) that 404s and the book falls back to each visitor's own
-   browser, so nobody sees anybody else's signatures. For a SHARED, permanent
-   book deploy tools/guestbook-worker.js and paste its URL here. */
-const GB_URL = "/gb";
+/* Where the guest book lives — Clay's Cloudflare Worker (tools/guestbook-worker.js),
+   so the book is SHARED and permanent instead of per-visitor. Locally the little
+   tools/serve.py still answers "/gb"; anywhere else this absolute URL is used. */
+const GB_URL = location.hostname === "localhost" || location.hostname === "127.0.0.1"
+  ? "/gb"
+  : "https://retrospective-guestbook.clayburton.workers.dev/";
 const GB = {
   remote:null,
   async fetchRemote(cb){ try{ const r=await fetch(GB_URL,{cache:"no-store"}); if(r.ok){ this.remote=await r.json(); cb&&cb(); } }catch(e){} },
