@@ -148,7 +148,7 @@ const cards = {
     hots:[
       { r:[0,0,1536,760], cur:"hand", fn:"skyUFO" },
       { r:[950,250,230,240], cur:"hand", fn:"streetLight" },
-      { r:[548,770,440,250], cur:"fwd", exitZone:true, fn:"leaveMuseum" },   // the end of the road → leave
+      { r:[540,780,460,380], cur:"fwd", exitZone:true, fn:"leaveMuseum" },   // the end of the road → leave
     ],
     after(H,S){ if (S.st.starsOut) starsBg(true); },
     leave(H,S){ starsBg(false); },
@@ -166,7 +166,7 @@ const cards = {
       H.type(ctx,"the museum is behind you", 768, 1500, { cells:3.2, align:"center", alpha:0.28, color:"#8a867c", plain:true });
       // the way out — painted on the road at the end of it; brightens when you hover the end
       const leaving = S.hover && S.hover.exitZone;
-      H.type(ctx,"go back to clayandkelsy.com?", 768, 1058, { cells:2.5, align:"center", plain:true, color:"#171717", alpha: leaving?0.94:0.32 });
+      H.type(ctx,"go back to clayandkelsy.com?", 768, 1130, { cells:5, align:"center", plain:true, color:"#171717", alpha: leaving?0.96:0.4 });
     },
   },
 

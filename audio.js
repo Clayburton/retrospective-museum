@@ -101,8 +101,38 @@ function noiseBuffer(sec, brown) {
   }
   return b;
 }
+/* a loopable bed of soft night crickets — scattered gated high chirps */
+function cricketBuffer(sec) {
+  const sr = ctx.sampleRate, n = Math.floor(sr * sec);
+  const b = ctx.createBuffer(1, n, sr), ch = b.getChannelData(0);
+  const nChirps = Math.round(sec * 2.4);
+  for (let c = 0; c < nChirps; c++) {
+    const carrier = 4150 + Math.random() * 950;      // chirp pitch
+    const trem = 26 + Math.random() * 18;            // pulse (trill) rate
+    const dur = 0.13 + Math.random() * 0.18;
+    const amp = 0.20 + Math.random() * 0.14;
+    const s0 = Math.floor((Math.random() * (sec - 0.6) + 0.15) * sr);
+    const len = Math.floor(dur * sr);
+    for (let i = 0; i < len && s0 + i < n; i++) {
+      const t = i / sr, k = i / len;
+      const envA = Math.sin(Math.PI * k);            // soft in/out over the chirp
+      const pulse = 0.5 + 0.5 * Math.sin(2 * Math.PI * trem * t);
+      const gate = pulse > 0.4 ? 1 : 0;              // chirp-chirp-chirp trill
+      ch[s0 + i] += Math.sin(2 * Math.PI * carrier * t) * envA * pulse * gate * amp;
+    }
+  }
+  return b;
+}
 function mkAmbient(def) {
   const g = ctx.createGain(); g.gain.value = 0; g.connect(master);
+  // gentle night crickets (outdoor beds only)
+  if (def.crickets) {
+    const cs = ctx.createBufferSource(); cs.buffer = cricketBuffer(4.3); cs.loop = true;
+    const cf = ctx.createBiquadFilter(); cf.type = "bandpass"; cf.frequency.value = 4600; cf.Q.value = 2.4;
+    const cg = ctx.createGain(); cg.gain.value = def.crickets;
+    cs.connect(cf); cf.connect(cg); cg.connect(g);
+    cs.start();
+  }
   // filtered brown-noise bed
   const src = ctx.createBufferSource();
   src.buffer = noiseBuffer(3.1, true); src.loop = true;
@@ -129,8 +159,8 @@ function mkAmbient(def) {
 }
 function buildAmbients() {
   const defs = {
-    street: { lpf: 240,  noise: 0.55, hum: 0,   vol: 0.16 },
-    lamp:   { lpf: 200,  noise: 0.30, hum: 118, humGain: 0.014, whine: 2340, whineGain: 0.006, vol: 0.14 },
+    street: { lpf: 240,  noise: 0.55, hum: 0,   vol: 0.16, crickets: 0.9 },
+    lamp:   { lpf: 200,  noise: 0.30, hum: 118, humGain: 0.014, whine: 2340, whineGain: 0.006, vol: 0.14, crickets: 0.9 },
     dark:   { lpf: 120,  noise: 0.40, hum: 0,   vol: 0.10 },
     hall:   { lpf: 420,  noise: 0.30, hum: 100, humGain: 0.020, vol: 0.14 },
     rot:    { lpf: 700,  noise: 0.22, hum: 60,  humGain: 0.010, vol: 0.12 },
