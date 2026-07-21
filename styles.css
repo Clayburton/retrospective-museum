@@ -112,7 +112,10 @@ body.ready #boot { opacity: 0; }
 #gbInput {
   position: absolute;
   display: none;
-  left: 0; top: 0; width: 100%; height: 60%;
+  /* It only exists to catch keystrokes and raise the mobile keyboard, but it's an
+     invisible click-eater: keep it OFF the lower third so the "close the book"
+     plate underneath actually receives the click. */
+  left: 0; top: 0; width: 100%; height: 55%;
   background: transparent;
   border: 0; outline: 0;
   opacity: 0;

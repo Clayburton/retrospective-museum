@@ -229,6 +229,10 @@ const HFRAME_R = [343, 332, 853, 870];
 /* the right-hand picture is really three: poke it and it dissolves to the next */
 const HPIC2_SEQ = ["el-hpic2", "el-hpic2b", "el-hpic2c"];
 
+/* the guest book's way out. It sits BELOW the invisible keystroke-catcher input
+   so the click actually reaches the canvas — people were getting stuck in here. */
+const GB_CLOSE = [524, 1306, 488, 96];
+
 /* The playable-Manhole-in-the-frame experiment is removed for now — see the
    note in CLAUDE.md. The right picture is simply a picture again. */
 function mhShow() {}
@@ -669,6 +673,7 @@ const cards = {
   "guestbook": {
     id:"guestbook", proc:"guestbook", tone:"paper", room:"rot", ambient:"rot", dynRes:1254, live:true,
     nav:{ back:"rotunda" },
+    hots:[ { r:GB_CLOSE, cur:"back", go:"rotunda", t:"dissolve", spd:"fast" } ],
     after(H,S){ GB.show(H,S); },
     leave(H,S){ GB.hide(); },
     draw(ctx,H,S,t){
@@ -682,6 +687,16 @@ const cards = {
       const caret = (Math.floor(t/500)%2===0) ? "|" : " ";
       H.type(ctx, (buf||"") + caret, 250, y, {cells:5.5,alpha:1,color:"#101010",plain:true,seed:99});
       S.st.gbLineY = y;
+      // an unmissable way out — people were getting stranded in the book
+      H.type(ctx,"press ENTER to sign  ·  ESC to close", 768, 1250,
+             {cells:3.6,align:"center",alpha:0.62,color:"#101010",plain:true,seed:123});
+      const R = GB_CLOSE;
+      ctx.fillStyle="rgb(244,241,232)"; ctx.fillRect(R[0],R[1],R[2],R[3]);
+      ctx.strokeStyle="#101010"; ctx.lineWidth=4;
+      ctx.strokeRect(R[0],R[1],R[2],R[3]);
+      ctx.strokeRect(R[0]+7,R[1]+7,R[2]-14,R[3]-14);
+      H.type(ctx,"[ close the book ]", 768, R[1]+R[3]/2,
+             {cells:5,align:"center",color:"#101010",plain:true,seed:124,spacing:0.02});
     },
   },
 };
@@ -997,6 +1012,11 @@ const GB = {
     this.fetchRemote(()=>{ S.A&&(S.A.dirty=true); window.__mus&&window.__mus.renderOnce(); });
     el.oninput=()=>{ S.st.gbBuf=el.value; };
     el.onkeydown=e=>{
+      if (e.key==="Escape"){                     // always a way out, even mid-sentence
+        e.preventDefault(); e.stopPropagation();
+        H.go("rotunda",{ t:"dissolve", spd:"fast" });
+        return;
+      }
       if (e.key==="Enter" && el.value.trim()){
         const raw=el.value.trim(); el.value=""; S.st.gbBuf="";
         if (!(window.gbClean && window.gbClean(raw))){ H.sfx("blot");
