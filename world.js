@@ -74,6 +74,7 @@ function loadImg(name) {
  "el-hpic2b","el-hpic2c",
  "el-fish1","el-fish2","el-fish3","el-fish4",
  "el-booth-mask",
+ "el-eyeF1","el-eyeF2","el-eyeF3","el-eyeF4","el-eyeF5","el-eyeF6","el-eyeF7","el-eyeF8","el-eyeF9","el-eyeF10","el-eyeF11","el-eyeF12","el-eyeF13","el-eyeF14","el-eyeF15","el-eyeF16",
  "el-recI1","el-recI2","el-recI3","el-recI4","el-recI5","el-recI6","el-recI7","el-recI8","el-recI9","el-recI10","el-recI11","el-recI12","el-recS1","el-recS2","el-recS3","el-recS4","el-recS5","el-recS6","el-recS7","el-recS8","el-recS9","el-recS10","el-recS11","el-recS12"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
@@ -384,7 +385,7 @@ const BOOTH = [1248, 575, 154, 260];
    his head at local y0 — so a crop at those edges clips the nose and makes the
    head flicker. Inset from both. At the true width his original size fits AND
    the trunk shows: tip 4px inside the glass, face just past its middle. */
-const REC = { w: 250, cx: 1377, y: 589 };
+const REC = { w: 250, cx: 1366, y: 589 };
 const REC_FPS = 11;
 const REC_IN_MS = 950;                       // rising into the window
 const REC_LINES = [
@@ -440,6 +441,71 @@ function drawSpeech(ctx, H, S, t) {
   ctx.restore();
   H.wrap(ctx, full, R[0] + 40, R[1] + 74,
          { cells: 7.6, maxW: R[2] - 80, lh: 1.5, chars: shown, color: "#101010", plain: true, seed: 300 });
+}
+
+/* ============================== the eye through the oculus (rotunda) ======
+   Second time you poke the hole, something comes down through it instead of
+   bats: it drops in at roughly the width of the opening, swells a little as it
+   nears you, then hangs in the room for the rest of the visit. 16 frames, all
+   cropped to one shared bbox so its hover can't jitter. */
+const EYE_HOLE = [766, 62];                 // the oculus centre it drops through
+const EYE_HOME = [768, 336];                // where it settles
+const EYE_W0 = 190, EYE_W1 = 252;           // fits the hole -> a touch nearer
+const EYE_IN_MS = 1700, EYE_OUT_MS = 1500;
+const EYE_FPS = 13;
+const EYE_LINES = ["i....", "....I am"];
+const EYE_HOT = [628, 196, 280, 288];       // generous, since it bobs
+const EYE_CPS = 7;                          // it speaks slowly
+
+function eyePose(S, t) {                     // -> {x, y, w, alpha} or null
+  const st = S.st;
+  if (!st.eyeS) return null;
+  const bobX = Math.sin(t / 1300) * 14, bobY = Math.sin(t / 900) * 11;
+  if (st.eyeS === 1) {                       // coming down through the hole
+    const k = Math.min(1, (t - st.eyeT0) / EYE_IN_MS);
+    const e = k * k * (3 - 2 * k);
+    return { x: EYE_HOLE[0] + (EYE_HOME[0] - EYE_HOLE[0]) * e,
+             y: EYE_HOLE[1] + (EYE_HOME[1] - EYE_HOLE[1]) * e,
+             w: EYE_W0 + (EYE_W1 - EYE_W0) * e, alpha: Math.min(1, k * 3) };
+  }
+  if (st.eyeS === 4) {                       // going back up and away
+    const k = Math.min(1, (t - st.eyeT0) / EYE_OUT_MS);
+    const e = k * k * (3 - 2 * k);
+    return { x: EYE_HOME[0] + (EYE_HOLE[0] - EYE_HOME[0]) * e,
+             y: EYE_HOME[1] + (EYE_HOLE[1] - EYE_HOME[1] - 220) * e,
+             w: EYE_W1 + (EYE_W0 - EYE_W1) * e, alpha: 1 - Math.max(0, (k - 0.55) / 0.45) };
+  }
+  return { x: EYE_HOME[0] + bobX, y: EYE_HOME[1] + bobY, w: EYE_W1, alpha: 1 };
+}
+
+function drawEye(ctx, H, S, t) {
+  const p = eyePose(S, t);
+  if (!p || p.alpha <= 0.01) return;
+  const im = IMG["el-eyeF" + (Math.floor(t / 1000 * EYE_FPS) % 16 + 1)];
+  if (!im || !im.complete || !im.naturalWidth) return;
+  const h = p.w * im.naturalHeight / im.naturalWidth;
+  ctx.save();
+  ctx.globalAlpha = p.alpha;
+  ctx.drawImage(im, p.x - p.w / 2, p.y - h / 2, p.w, h);
+  ctx.restore();
+
+  if (S.st.eyeS !== 3 || S.st.eyeSayT0 == null) return;
+  const line = EYE_LINES[S.st.eyeLine] || "";
+  const shown = Math.max(0, Math.floor((t - S.st.eyeSayT0) / 1000 * EYE_CPS));
+  const bw = 300, bh = 110, bx = p.x - bw - 96, by = p.y - bh / 2;
+  ctx.save();
+  ctx.fillStyle = "rgb(246,243,235)"; ctx.fillRect(bx, by, bw, bh);
+  ctx.strokeStyle = "#101010"; ctx.lineWidth = 5; ctx.strokeRect(bx, by, bw, bh);
+  ctx.lineWidth = 2; ctx.strokeRect(bx + 8, by + 8, bw - 16, bh - 16);
+  ctx.fillStyle = "rgb(246,243,235)";
+  ctx.beginPath(); ctx.moveTo(bx + bw - 5, by + 34); ctx.lineTo(bx + bw + 62, by + bh / 2);
+  ctx.lineTo(bx + bw - 5, by + bh - 34); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = "#101010"; ctx.lineWidth = 5;
+  ctx.beginPath(); ctx.moveTo(bx + bw - 3, by + 34); ctx.lineTo(bx + bw + 62, by + bh / 2);
+  ctx.lineTo(bx + bw - 3, by + bh - 34); ctx.stroke();
+  ctx.restore();
+  H.type(ctx, line.slice(0, shown), bx + bw / 2, by + bh / 2,
+         { cells: 6.5, align: "center", color: "#101010", plain: true, seed: 401 });
 }
 
 /* text under the pictures reads small on a phone — nudge it up when the
@@ -668,9 +734,10 @@ const cards = {
       { r:[1181,740,190,320], cur:"fwd", go:"annex", t:"dissolve", spd:"fast" },
       { r:[360,880,230,230], cur:"quill", go:"guestbook", t:"irisOpen", spd:"fast", at:[460,1000] },
       { r:[970,920,250,300], cur:"hand", fn:"glassTapFlower" },
-      { r:[643,0,247,150], cur:"hand", fn:"batsIn" },        // the oculus at the top of the dome
+      { r:[643,0,247,150], cur:"hand", fn:"oculus" },        // the oculus at the top of the dome
+      { r:EYE_HOT, cur:"hand", fn:"eyeTalk" },               // whatever came through it
     ],
-    draw(ctx,H,S,t){ /* no doorway labels — the doorways speak for themselves */ },
+    draw(ctx,H,S,t){ drawEye(ctx,H,S,t); },
   },
 
   /* ---- galleries ---- (mouse hole lives in y17a) */
@@ -1059,6 +1126,47 @@ const ACTIONS = {
     H.sfx("buzz");
     window.AUDIO.ambient(S.st.lampOut ? "dark" : "lamp");
     S.A.dirty=true;
+  },
+
+  /* Poke the hole: bats the first time, something else the second, bats again
+     after that. The eye only ever arrives once per visit. */
+  oculus(hot,H,S){
+    S.st.ocN = (S.st.ocN || 0) + 1;
+    if (S.st.ocN === 2 && !S.st.eyeSeen) {
+      S.st.eyeSeen = 1;
+      S.st.eyeS = 1; S.st.eyeT0 = performance.now(); S.st.eyeLine = -1;
+      H.sfx("whisper"); setTimeout(()=>H.sfx("musicbox"), 700);
+      setTimeout(()=>{                      // wall clock — a stalled render can't strand it
+        if (S.st.eyeS === 1) { S.st.eyeS = 2; S.A.dirty = true;
+          window.__mus && window.__mus.renderOnce(); }
+      }, EYE_IN_MS + 40);
+      S.A.dirty = true;
+      return;
+    }
+    ACTIONS.batsIn(hot,H,S);
+  },
+
+  /* it has two things to say, and then it goes */
+  eyeTalk(hot,H,S){
+    const st = S.st;
+    if (!st.eyeS || st.eyeS === 1 || st.eyeS === 4) return;   // not here / busy arriving or leaving
+    const next = (st.eyeLine == null ? -1 : st.eyeLine) + 1;
+    if (next >= EYE_LINES.length) {                           // said its piece — away it goes
+      st.eyeS = 4; st.eyeT0 = performance.now();
+      H.sfx("whisper");
+      setTimeout(()=>{ if (S.st.eyeS === 4) { S.st.eyeS = 0; S.A.dirty = true;
+        window.__mus && window.__mus.renderOnce(); } }, EYE_OUT_MS + 40);
+      S.A.dirty = true; return;
+    }
+    st.eyeLine = next; st.eyeS = 3; st.eyeSayT0 = performance.now();
+    const line = EYE_LINES[next];
+    clearTimeout(st.eyeDone);
+    st.eyeDone = setTimeout(()=>{                             // back to just hovering
+      if (S.st.eyeS === 3) { S.st.eyeS = 2; S.A.dirty = true;
+        window.__mus && window.__mus.renderOnce(); }
+    }, line.length / EYE_CPS * 1000 + 2400);
+    H.sfx("tickSoft");
+    S.A.dirty = true;
   },
 
   /* the oculus at the top of the dome — a flurry of bats drops in, circles, and leaves */
