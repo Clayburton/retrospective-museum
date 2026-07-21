@@ -374,15 +374,17 @@ function drawFisher(ctx, S, t) {
    the booth's white pane (el-booth-mask), which was flooded from inside the
    glass — the bell's outline stopped the flood, so the bell is excluded from
    the mask and therefore always stays in FRONT of him.                        */
-const BOOTH = [1287, 573, 114, 363];        // the pane, measured off the art
+/* The opening, measured by slicing across the art for the frame's dark uprights:
+   they end at x1246 and begin again at x1403, so the glass is 155 wide — NOT the
+   114 an earlier flood-fill found (an interior curtain line blocked it, which is
+   what squeezed him). The bottom stops just above the bell, so his neck can
+   never reach it however tall he is. */
+const BOOTH = [1248, 575, 154, 260];
 /* His ink touches the very edge of its own bbox — trunk tip at local x0, top of
-   his head at local y0 — so any crop at those edges clips the nose and makes the
-   head flicker against the mask boundary. Inset him from both, and keep him
-   short enough that his neck stops above the bell. */
-/* The pane is 114 wide against a 346-wide sprite, so he can't be big AND whole.
-   Sized so nearly all of him reads inside the glass: trunk tip 6px in from the
-   left, head 19px below the top, base well clear of the bell. */
-const REC = { w: 122, cx: 1354, y: 592 };
+   his head at local y0 — so a crop at those edges clips the nose and makes the
+   head flicker. Inset from both. At the true width his original size fits AND
+   the trunk shows: tip 4px inside the glass, face just past its middle. */
+const REC = { w: 250, cx: 1377, y: 589 };
 const REC_FPS = 11;
 const REC_IN_MS = 950;                       // rising into the window
 const REC_LINES = [
@@ -402,14 +404,14 @@ function drawReceptionist(ctx, H, S, t) {
   const im = IMG[recFrame(S, t)];
   if (!im || !im.complete || !im.naturalWidth) return;
   const w = REC.w, h = w * im.naturalHeight / im.naturalWidth;
-  let dy = 0;
-  if (st.recState === 1) {                   // rising up into the window
+  let dx = 0;
+  if (st.recState === 1) {                   // walking in from off-frame right
     const k = Math.min(1, (t - st.recT0) / REC_IN_MS);
-    dy = (1 - k * k * (3 - 2 * k)) * (BOOTH[3] + h * 0.5);
+    dx = (1 - k * k * (3 - 2 * k)) * (BOOTH[2] + w);   // starts clear of the glass
   }
   ctx.save();
   ctx.beginPath(); ctx.rect(BOOTH[0], BOOTH[1], BOOTH[2], BOOTH[3]); ctx.clip();
-  ctx.drawImage(im, REC.cx - w / 2, REC.y + dy, w, h);
+  ctx.drawImage(im, REC.cx - w / 2 + dx, REC.y, w, h);
   ctx.restore();
 }
 
