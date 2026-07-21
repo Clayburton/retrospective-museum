@@ -463,7 +463,8 @@ const cards = {
   "y17b": { id:"y17b", img:V+"gallery-c.png", tone:"ink", room:"y17", ambient:"room",
     nav:{ left:"y17a", back:"rotunda" },
     frames:[{ song:"casino", r:[252,576,168,240], plate:[312,940,72,22] },{ song:"wondering", r:[630,534,270,294], plate:[728,950,71,23] },{ song:"i-can-do-it-all", r:[1104,576,174,240], plate:[1174,940,73,22] }],
-    hots: bulbHots([[315,111],[1218,111]]),
+    hots: [ { r:[78,1325,295,170], cur:"hand", fn:"streetGrate" },   // the floor grate — same drop as the street's
+            ...bulbHots([[315,111],[1218,111]]) ],
     draw(ctx,H,S,t){ } },
 
   "late-a": { id:"late-a", img:V+"gallery-d.png", tone:"ink", room:"late", ambient:"room",
@@ -737,14 +738,14 @@ const ACTIONS = {
         cy:  430 + Math.random()*190,
         rx:  300 + Math.random()*210,
         ry:  150 + Math.random()*100,
-        turns: 1.6 + Math.random()*0.9,
+        turns: 3.0 + Math.random()*1.5,          // more laps, so they really move
         dir: Math.random() < 0.5 ? 1 : -1,
-        lag: Math.random()*0.10,                 // stagger the entrances
-        flap: 9 + Math.random()*4,               // wingbeats per second
-        sz:  128 + Math.random()*62,
+        lag: Math.random()*0.09,                 // stagger the entrances
+        flap: 17 + Math.random()*7,              // wingbeats per second
+        sz:  74 + Math.random()*36,
       });
     }
-    const DUR = 7600;
+    const DUR = 5200;
     const ss = (a,b,x)=>{ const k=Math.max(0,Math.min(1,(x-a)/(b-a))); return k*k*(3-2*k); };
     H.anim("rotunda", DUR, (ctx,k)=>{
       for (const b of bat) {
