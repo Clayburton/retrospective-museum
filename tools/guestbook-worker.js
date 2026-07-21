@@ -28,7 +28,10 @@
 
 const KEY      = "book";     // the KV key everything lives under
 const MAX_LINE = 60;         // characters per signature
-const MAX_KEEP = 2000;       // signatures retained (oldest dropped past this)
+/* Signatures retained. The book is meant to grow forever, so this is set far
+   past any realistic use: 50,000 lines x ~60 chars is about 3MB, and a KV value
+   can hold 25MB. Past this the oldest finally drop off. */
+const MAX_KEEP = 50000;
 
 const CORS = {
   "access-control-allow-origin": "*",

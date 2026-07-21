@@ -127,13 +127,17 @@ function elemInvert(ctx, name, x, y, w, h) {    // draw a WHITE element (el-stra
 }
 /* fill a rect edge to edge with an element, cropping the overflow — for pictures
    that should FILL their frame rather than float inside it with letterboxing */
-function elemCover(ctx, name, x, y, w, h) {
+/* ax picks WHICH part of a too-wide picture survives the crop:
+   0.5 centres it (default), 1 slides the picture left so its RIGHT side shows,
+   0 slides it right so its LEFT side shows. */
+function elemCover(ctx, name, x, y, w, h, ax) {
   const im = IMG[name]; if (!im || !im.complete || !im.naturalWidth) return;
   const s = Math.max(w / im.naturalWidth, h / im.naturalHeight);
+  const dw = im.naturalWidth * s, dh = im.naturalHeight * s;
+  const a = (ax == null) ? 0.5 : ax;
   ctx.save();
   ctx.beginPath(); ctx.rect(x, y, w, h); ctx.clip();       // the frame masks the overflow
-  ctx.drawImage(im, x + (w - im.naturalWidth*s)/2, y + (h - im.naturalHeight*s)/2,
-                im.naturalWidth*s, im.naturalHeight*s);
+  ctx.drawImage(im, x + (w - dw) * a, y + (h - dh) / 2, dw, dh);
   ctx.restore();
 }
 /* draw a DARK-ink element recoloured to paper-white — el-ufo is black line art,
@@ -226,8 +230,14 @@ function filmStop() {
 /* the hallway picture frame's real opening in the art (detected, not guessed) */
 const HFRAME_R = [343, 332, 853, 870];
 
-/* the right-hand picture is really three: poke it and it dissolves to the next */
-const HPIC2_SEQ = ["el-hpic2", "el-hpic2b", "el-hpic2c"];
+/* The right-hand picture is really three: poke it and it dissolves to the next.
+   ax = which part survives the crop — the third one is anchored right so the
+   tortoise and his speech bubble stay in the frame. */
+const HPIC2_SEQ = [
+  { n:"el-hpic2"  },
+  { n:"el-hpic2b" },
+  { n:"el-hpic2c", ax:1 },
+];
 
 /* The guest book's bottom bar. All three sit BELOW the invisible keystroke-catcher
    input so the clicks actually reach the canvas — people were getting stuck. */
@@ -612,7 +622,8 @@ const cards = {
       if (n === 1) {
         elemCover(ctx, "el-eye" + eyeFrame(S,t), R[0], R[1], R[2], R[3]);     // the eye that blinks
       } else {
-        elemCover(ctx, HPIC2_SEQ[(S.st.hpic2 || 0) % HPIC2_SEQ.length], R[0], R[1], R[2], R[3]);
+        const pic = HPIC2_SEQ[(S.st.hpic2 || 0) % HPIC2_SEQ.length];
+        elemCover(ctx, pic.n, R[0], R[1], R[2], R[3], pic.ax);
       }
     },
   },
