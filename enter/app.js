@@ -99,9 +99,20 @@ const S = {
 
 /* master-space regions, lifted straight from the museum's facade card */
 const R_SIGN  = [280, 470, 700, 150];       // the frieze — knock on it
-const R_GRASS = [980, 1150, 520, 330];      // the tufts — something lives there
-const R_ENTER = [250, 300, 1040, 1130];     // the building itself: the way in
-let   R_CTA   = [0, 0, 0, 0];               // filled in when the plate is drawn
+const R_GRASS = [0, 1140, 1536, 400];       // the whole ground: something lives out there
+const R_DOOR  = [590, 750, 360, 340];       // the front doors — one of only two ways in
+const CTA_LABEL = "[ enter the museum ]";
+const CTA_CELLS = 6.4;
+/* The plate's rect is computed on demand, NOT stashed while drawing — hit-testing
+   must never depend on a frame having rendered first, or an early click falls
+   through the button and lands on the scenery behind it. */
+function ctaRect() {
+  const fs = CTA_CELLS * 5.0 * K;
+  dx.font = face(fs);
+  const tw = dx.measureText(CTA_LABEL).width / K;
+  const cy = 1268, pw = tw + 96, ph = 108;
+  return [768 - pw / 2, cy - ph / 2, pw, ph];
+}
 
 /* ------------------------------------------------------------------ audio -- */
 let AC = null;
@@ -218,13 +229,10 @@ function drawDyn(now) {
   type("RETROSPECTIVE", 762, 566, { cells: 10, spacing: 0.08 });
   type("clay and kelsy", 762, 604, { cells: 4.6 });
 
-  // the invitation — a flat sticker plate that inverts when you're on it
-  const label = "[ enter the museum ]";
-  const cells = 6.4, fs = cells * 5.0 * K;
-  dx.font = face(fs);
-  const tw = dx.measureText(label).width / K;
-  const cy = 1268, pw = tw + 96, ph = 108, px = 768 - pw / 2, py = cy - ph / 2;
-  R_CTA = [px, py, pw, ph];
+  // the invitation — a flat sticker plate that inverts when you're on it.
+  // Same rect the hit-test uses, so what you see is exactly what you can click.
+  const [px, py, pw, ph] = ctaRect();
+  const cy = py + ph / 2;
 
   const on = S.hoverCta;
   dx.save();
@@ -234,7 +242,7 @@ function drawDyn(now) {
   dx.lineWidth = 4 * K;
   dx.strokeRect((px + 6) * K, (py + 6) * K, (pw - 12) * K, (ph - 12) * K);
   dx.restore();
-  type(label, 768, cy, { cells, color: on ? "rgb(244,241,232)" : "#101010", spacing: 0.02 });
+  type(CTA_LABEL, 768, cy, { cells: CTA_CELLS, color: on ? "rgb(244,241,232)" : "#101010", spacing: 0.02 });
 
   if (S.mouseRun) {
     const k = (now - S.mouseRun) / 760;
@@ -271,7 +279,7 @@ const quad = new THREE.Mesh(
 quad.frustumCulled = false;
 scene.add(quad);
 
-new THREE.TextureLoader().load("assets/facade.png?v=5", t => {
+new THREE.TextureLoader().load("assets/facade.png?v=7", t => {
   t.minFilter = t.magFilter = THREE.LinearFilter;    // LINEAR so the blur can recover tone
   t.generateMipmaps = false;
   t.flipY = false;                                   // shader works in image space
@@ -305,10 +313,12 @@ const inRect = (m, r) => m[0] >= r[0] && m[0] <= r[0] + r[2] && m[1] >= r[1] && 
 
 function hitAt(cx, cy) {
   const m = c2m(cx, cy);
-  if (inRect(m, R_CTA))   return "cta";
+  // ONLY the plate and the front doors open the museum. Everything else — the
+  // grass, the columns, the sky, the surround — is scenery you can poke safely.
+  if (inRect(m, ctaRect())) return "cta";
+  if (inRect(m, R_DOOR))  return "enter";
   if (inRect(m, R_SIGN))  return "sign";
   if (inRect(m, R_GRASS)) return "grass";
-  if (inRect(m, R_ENTER)) return "enter";
   return null;                                     // sky and surround: just scenery
 }
 function setCursor(c) { document.body.className = c ? "cur-" + c : ""; }
