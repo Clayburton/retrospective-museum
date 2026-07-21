@@ -74,7 +74,7 @@ function loadImg(name) {
  "el-hpic2b","el-hpic2c",
  "el-fish1","el-fish2","el-fish3","el-fish4",
  "el-booth-mask",
- "el-eyeF1","el-eyeF2","el-eyeF3","el-eyeF4","el-eyeF5","el-eyeF6","el-eyeF7","el-eyeF8","el-eyeF9","el-eyeF10","el-eyeF11","el-eyeF12","el-eyeF13","el-eyeF14","el-eyeF15","el-eyeF16",
+ "el-eyeF1","el-eyeF2","el-eyeF3","el-eyeF4","el-eyeF5","el-eyeF6","el-eyeF7","el-eyeF8","el-eyeF9","el-eyeF10","el-eyeF11","el-eyeF12","el-eyeF13","el-eyeF14","el-eyeF15","el-eyeF16","el-eyeF17","el-eyeF18","el-eyeF19","el-eyeF20","el-eyeF21","el-eyeF22","el-eyeF23","el-eyeF24","el-eyeF25","el-eyeF26","el-eyeF27","el-eyeF28","el-eyeF29","el-eyeF30","el-eyeF31","el-eyeF32",
  "el-recI1","el-recI2","el-recI3","el-recI4","el-recI5","el-recI6","el-recI7","el-recI8","el-recI9","el-recI10","el-recI11","el-recI12","el-recS1","el-recS2","el-recS3","el-recS4","el-recS5","el-recS6","el-recS7","el-recS8","el-recS9","el-recS10","el-recS11","el-recS12"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
@@ -389,9 +389,9 @@ const REC = { w: 250, cx: 1366, y: 589 };
 const REC_FPS = 11;
 const REC_IN_MS = 950;                       // rising into the window
 const REC_LINES = [
-  "Welcome to the Clay and Kelsy Retrospective",
-  "Please sign the guest book in the rotunda",
-  "I seem to have lost my key to the theater and Photo Booth...",
+  "Mhmm yes? Oh, hello! Welcome to the Clay and Kelsy's Retrospective.",
+  "Please stay as long as you'd like, and sign the guest book in the Rotunda",
+  "I seem to have dropped my key to the [Theater] and the [PhotoBooth] room...",
 ];
 const REC_CPS = 20;                          // slow enough that one toot per letter reads as speech
 
@@ -452,7 +452,9 @@ const EYE_HOLE = [766, 62];                 // the oculus centre it drops throug
 const EYE_HOME = [768, 336];                // where it settles
 const EYE_W0 = 190, EYE_W1 = 252;           // fits the hole -> a touch nearer
 const EYE_IN_MS = 1700, EYE_OUT_MS = 1500;
-const EYE_FPS = 13;
+/* The gif's own timing: 32 frames over 2.88s. Play every frame at its native
+   rate and the wingbeat reads as flight; dropping frames made it stutter. */
+const EYE_FPS = 100 / 9, EYE_FRAMES = 32;
 const EYE_LINES = ["i....", "....I am"];
 const EYE_HOT = [628, 196, 280, 288];       // generous, since it bobs
 const EYE_CPS = 7;                          // it speaks slowly
@@ -481,7 +483,7 @@ function eyePose(S, t) {                     // -> {x, y, w, alpha} or null
 function drawEye(ctx, H, S, t) {
   const p = eyePose(S, t);
   if (!p || p.alpha <= 0.01) return;
-  const im = IMG["el-eyeF" + (Math.floor(t / 1000 * EYE_FPS) % 16 + 1)];
+  const im = IMG["el-eyeF" + (Math.floor(t / 1000 * EYE_FPS) % EYE_FRAMES + 1)];
   if (!im || !im.complete || !im.naturalWidth) return;
   const h = p.w * im.naturalHeight / im.naturalWidth;
   ctx.save();
@@ -726,6 +728,8 @@ const cards = {
   /* ---- rotunda hub ---- */
   "rotunda": {
     id:"rotunda", img:V+"rotunda.png", tone:"ink", room:"rot", ambient:"rot", depth:0,
+    live:true,                       // the eye hovers here — this card animates on its own
+
     nav:{ back:"door" },
     hots:[
       { r:[154,740,190,320], cur:"fwd", go:"early",  t:"dissolve", spd:"fast" },
