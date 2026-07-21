@@ -5,7 +5,8 @@ html, body {
   margin: 0; padding: 0; width: 100%; height: 100%;
   background: #101010;
   overflow: hidden;
-  overscroll-behavior: none;
+  /* NO overscroll-behavior here — it stops the wheel from chaining out to the
+     host page, which makes the whole article feel stuck under the cursor. */
 }
 
 #shell { position: absolute; inset: 0; }

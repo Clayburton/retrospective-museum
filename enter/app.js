@@ -5,9 +5,12 @@
    tone, then re-dither at one consistent cell size), so this strip and the world
    behind the door are unmistakably the same object.
 
+   The art is shown as a TRUE 1:1 SQUARE, exactly like the game — letterboxed in
+   ink, never stretched to the width of the page.
+
    Quick to load on purpose: no models, no post stack, two textures — a 59KB
-   facade and a 2D canvas for the type and the mouse. three is pinned to the same
-   jsDelivr build every other clay-and-kelsy piece uses, so it's usually cached.
+   facade and a canvas for the type. three is pinned to the same jsDelivr build
+   every other clay-and-kelsy piece uses, so it's usually cached.
    ========================================================================== */
 import * as THREE from "three";
 
@@ -15,6 +18,7 @@ import * as THREE from "three";
    on. It navigates the TOP window, so it must be the WP page, not the raw
    github.io URL. Change this one line and re-push. */
 const MUSEUM_URL = "https://clayandkelsy.com/retrospective/";
+
 const M = 1536;                    // master square, same coordinate space as the museum
 const DYN = 1152;                  // the 2D layer's resolution
 
@@ -25,22 +29,18 @@ const P = {
   paper: [0.953, 0.945, 0.925],
   ink:   [0.043, 0.043, 0.047],
   dprCap: 2,
-  focusY: 950,                     // the building's heart — what stays framed when we crop
 };
 
 /* --------------------------------------------------------------- shaders -- */
 const VERT = /* glsl */`
-out vec2 vUv;
-void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }`;
+void main(){ gl_Position = vec4(position.xy, 0.0, 1.0); }`;
 
 const FRAG = /* glsl */`
 precision highp float;
 uniform sampler2D tMaster, tDyn;
-uniform vec4  crop;          // master sample rect (cover-fit)
-uniform vec2  res;           // canvas device px
+uniform vec4  sq;            // the square's rect in device px (x, y, w, h) — gl_FragCoord space
 uniform float ditherPx, smoothR, edgeAmt, flick;
 uniform vec3  paper, ink;
-in  vec2 vUv;
 out vec4 outC;
 
 const int B8[64] = int[64](
@@ -50,25 +50,26 @@ const int B8[64] = int[64](
   15,47, 7,39,13,45, 5,37,  63,31,55,23,61,29,53,21);
 
 void main(){
-  vec2 uv = vec2(vUv.x, 1.0 - vUv.y);              // image space, v down
-  vec2 blur = vec2(smoothR) / res;
+  // where are we inside the centred square? outside it, we're in the ink surround
+  vec2 t = (gl_FragCoord.xy - sq.xy) / sq.zw;
+  if (t.x < 0.0 || t.x > 1.0 || t.y < 0.0 || t.y > 1.0) { outC = vec4(ink, 1.0); return; }
+  vec2 uv = vec2(t.x, 1.0 - t.y);                  // image space, v down
+  vec2 blur = vec2(smoothR) / sq.zw;
 
   // 3x3 box-blur the master → approximate TONE out of the baked 1-bit art
   float g = 0.0;
-  g += texture(tMaster, mix(crop.xy, crop.zw, uv + vec2(-blur.x,-blur.y))).r;
-  g += texture(tMaster, mix(crop.xy, crop.zw, uv + vec2( 0.0,   -blur.y))).r;
-  g += texture(tMaster, mix(crop.xy, crop.zw, uv + vec2( blur.x,-blur.y))).r;
-  g += texture(tMaster, mix(crop.xy, crop.zw, uv + vec2(-blur.x, 0.0   ))).r;
-  g += texture(tMaster, mix(crop.xy, crop.zw, uv)).r * 2.0;
-  g += texture(tMaster, mix(crop.xy, crop.zw, uv + vec2( blur.x, 0.0   ))).r;
-  g += texture(tMaster, mix(crop.xy, crop.zw, uv + vec2(-blur.x, blur.y))).r;
-  g += texture(tMaster, mix(crop.xy, crop.zw, uv + vec2( 0.0,    blur.y))).r;
-  g += texture(tMaster, mix(crop.xy, crop.zw, uv + vec2( blur.x, blur.y))).r;
+  g += texture(tMaster, uv + vec2(-blur.x,-blur.y)).r;
+  g += texture(tMaster, uv + vec2( 0.0,   -blur.y)).r;
+  g += texture(tMaster, uv + vec2( blur.x,-blur.y)).r;
+  g += texture(tMaster, uv + vec2(-blur.x, 0.0   )).r;
+  g += texture(tMaster, uv).r * 2.0;
+  g += texture(tMaster, uv + vec2( blur.x, 0.0   )).r;
+  g += texture(tMaster, uv + vec2(-blur.x, blur.y)).r;
+  g += texture(tMaster, uv + vec2( 0.0,    blur.y)).r;
+  g += texture(tMaster, uv + vec2( blur.x, blur.y)).r;
   g /= 10.0;
 
-  // the dynamic layer lives in the SAME master square, so it must take the SAME
-  // crop — otherwise the type drifts off the frieze it was measured against
-  vec4 dd = texture(tDyn, mix(crop.xy, crop.zw, uv));   // crisp, never blurred
+  vec4 dd = texture(tDyn, uv);                     // type, stars, mouse — crisp, never blurred
   g = mix(g, dd.r, dd.a);
   g *= flick;
 
@@ -88,19 +89,19 @@ void main(){
 const stage = document.getElementById("stage");
 const S = {
   w: 0, h: 0, dpr: 1,
-  view: { scale: 1, fx: 768, fy: P.focusY },   // master→canvas mapping (cover fit)
-  hot: null,          // which region the pointer is over
-  ptr: { x: -1, y: -1 },
-  mouseRun: 0,        // timestamp the grass mouse started running
+  sq: { x: 0, y: 0, size: 1 },     // the square's CSS rect (top-left origin)
+  hot: null,
+  mouseRun: 0,
   flickA: null,
   hoverCta: false,
-  raf: 0, last: 0, need: true,
+  raf: 0,
 };
 
 /* master-space regions, lifted straight from the museum's facade card */
-const R_SIGN  = [280, 470, 700, 150];      // the frieze — knock on it
-const R_GRASS = [980, 1150, 520, 330];     // the tufts on the right — something lives there
-let   R_CTA   = [0, 0, 0, 0];              // filled in when the plate is drawn
+const R_SIGN  = [280, 470, 700, 150];       // the frieze — knock on it
+const R_GRASS = [980, 1150, 520, 330];      // the tufts — something lives there
+const R_ENTER = [250, 300, 1040, 1130];     // the building itself: the way in
+let   R_CTA   = [0, 0, 0, 0];               // filled in when the plate is drawn
 
 /* ------------------------------------------------------------------ audio -- */
 let AC = null;
@@ -142,45 +143,64 @@ dyn.width = dyn.height = DYN;
 const dx = dyn.getContext("2d");
 const K = DYN / M;                                   // master → dyn-canvas scale
 
-function face(px, bold) { return (bold ? "700 " : "400 ") + px + "px 'Courier Prime', 'Courier New', monospace"; }
+function face(px) { return "700 " + px + "px 'Courier Prime', 'Courier New', monospace"; }
 
-/* the museum's typewriter: bold, stroke-reinforced, a hair of jitter */
 function type(text, mx, my, o = {}) {
   const size = (o.cells || 5) * 5.0 * K;
   dx.save();
-  dx.font = face(size, true);
-  dx.textAlign = o.align || "center";
-  dx.textBaseline = "middle";
-  dx.fillStyle = o.color || "#101010";
-  dx.strokeStyle = o.color || "#101010";
+  dx.font = face(size);
+  dx.textAlign = "center"; dx.textBaseline = "middle";
+  dx.fillStyle = dx.strokeStyle = o.color || "#101010";
   dx.lineWidth = Math.max(1, size * 0.055);
-  dx.globalAlpha = o.alpha == null ? 1 : o.alpha;
-  const sp = o.spacing || 0;
-  const X = mx * K, Y = my * K;
+  const sp = o.spacing || 0, X = mx * K, Y = my * K;
   if (sp) {
     const chars = [...text];
     const w = chars.reduce((a, c) => a + dx.measureText(c).width, 0) + sp * size * (chars.length - 1);
-    let cx = X - (o.align === "left" ? 0 : w / 2);
+    let cx = X - w / 2;
     dx.textAlign = "left";
-    for (const c of chars) {
-      dx.strokeText(c, cx, Y); dx.fillText(c, cx, Y);
-      cx += dx.measureText(c).width + sp * size;
-    }
-  } else {
-    dx.strokeText(text, X, Y); dx.fillText(text, X, Y);
-  }
+    for (const c of chars) { dx.strokeText(c, cx, Y); dx.fillText(c, cx, Y); cx += dx.measureText(c).width + sp * size; }
+  } else { dx.strokeText(text, X, Y); dx.fillText(text, X, Y); }
   dx.restore();
   return dx.measureText(text).width / K;
 }
 
+/* ---- the sky. The art's own stars are fixed; these ones breathe. ---- */
+const STARS = (() => {
+  let s = 20130722;
+  const rnd = () => ((s = (s * 1664525 + 1013904223) % 4294967296) / 4294967296);
+  const out = [];
+  const ok = (x, y) => !(x > 340 && x < 1200 && y > 175);     // keep clear of the pediment
+  let guard = 0;
+  while (out.length < 15 && guard++ < 400) {
+    const x = 50 + rnd() * 1440, y = 26 + rnd() * 300;
+    if (ok(x, y)) out.push({ x, y, r: 2.8 + rnd() * 3.2, sp: 0.6 + rnd() * 1.9, ph: rnd() * 6.283 });
+  }
+  for (let i = 0; i < 5; i++) {                                // a few down the dark margins
+    const x = rnd() < 0.5 ? 34 + rnd() * 150 : 1352 + rnd() * 150;
+    out.push({ x, y: 340 + rnd() * 500, r: 2.6 + rnd() * 2.8, sp: 0.6 + rnd() * 1.9, ph: rnd() * 6.283 });
+  }
+  return out;
+})();
+
+function drawStars(now) {
+  const t = now / 1000;
+  dx.save();
+  dx.fillStyle = "rgb(250,247,239)";
+  for (const st of STARS) {
+    const k = 0.5 + 0.5 * Math.sin(t * st.sp + st.ph);
+    if (k < 0.12) continue;                                   // some wink out entirely
+    const r = st.r * (0.42 + 0.78 * k);
+    dx.beginPath(); dx.arc(st.x * K, st.y * K, r * K, 0, 7); dx.fill();
+  }
+  dx.restore();
+}
+
 function drawMouse(k) {
-  // startled — already running, tail whipping (no peek; same as the museum's)
-  // its lane is pinned inside the VISIBLE crop, or it scurries off below the frame
-  const bx = R_GRASS[0] + R_GRASS[2] * 0.5;
-  const by = Math.min(1330, S.view.fy + S.view.visH / 2 - 70);
+  // startled — already running, tail whipping (same as the museum's)
+  const bx = R_GRASS[0] + R_GRASS[2] * 0.5, by = 1360;
   const x = (bx - k * 620) * K, y = (by - 6 + Math.sin(k * 34) * 4) * K;
   dx.save();
-  dx.fillStyle = "rgb(22,22,20)"; dx.strokeStyle = "rgb(22,22,20)";
+  dx.fillStyle = dx.strokeStyle = "rgb(22,22,20)";
   dx.beginPath(); dx.ellipse(x, y + 18 * K, 30 * K, 15 * K, 0.05, 0, 7); dx.fill();
   dx.beginPath(); dx.arc(x - 20 * K, y + 8 * K, 15 * K, 0, 7); dx.fill();
   dx.lineWidth = 5 * K; dx.lineCap = "round";
@@ -192,19 +212,18 @@ function drawMouse(k) {
 function drawDyn(now) {
   dx.clearRect(0, 0, DYN, DYN);
 
-  // 1. the building's own lettering, on its blank frieze
-  type("RETROSPECTIVE", 762, 566, { cells: 10, color: "#101010", spacing: 0.08 });
-  type("clay and kelsy", 762, 604, { cells: 4.6, color: "#101010" });
+  drawStars(now);
 
-  // 2. the invitation — a flat sticker plate, black on paper, inverting on hover
+  // the building's own lettering, on its blank frieze
+  type("RETROSPECTIVE", 762, 566, { cells: 10, spacing: 0.08 });
+  type("clay and kelsy", 762, 604, { cells: 4.6 });
+
+  // the invitation — a flat sticker plate that inverts when you're on it
   const label = "[ enter the museum ]";
   const cells = 6.4, fs = cells * 5.0 * K;
-  dx.font = face(fs, true);
+  dx.font = face(fs);
   const tw = dx.measureText(label).width / K;
-  // the invitation must never be cropped away, whatever the strip's proportions
-  const cy = Math.min(1268, S.view.fy + S.view.visH / 2 - 96);
-  const pw = tw + 96, ph = 108, px = 768 - pw / 2, py = cy - ph / 2;
-  S.ctaY = cy;
+  const cy = 1268, pw = tw + 96, ph = 108, px = 768 - pw / 2, py = cy - ph / 2;
   R_CTA = [px, py, pw, ph];
 
   const on = S.hoverCta;
@@ -213,16 +232,14 @@ function drawDyn(now) {
   dx.fillRect(px * K, py * K, pw * K, ph * K);
   dx.strokeStyle = on ? "rgb(244,241,232)" : "#101010";
   dx.lineWidth = 4 * K;
-  dx.strokeRect(px * K + 6 * K, py * K + 6 * K, pw * K - 12 * K, ph * K - 12 * K);
+  dx.strokeRect((px + 6) * K, (py + 6) * K, (pw - 12) * K, (ph - 12) * K);
   dx.restore();
   type(label, 768, cy, { cells, color: on ? "rgb(244,241,232)" : "#101010", spacing: 0.02 });
 
-  // 3. the mouse, if something startled it
   if (S.mouseRun) {
     const k = (now - S.mouseRun) / 760;
     if (k >= 1) S.mouseRun = 0; else drawMouse(k);
   }
-
   tex.dyn.needsUpdate = true;
 }
 
@@ -240,8 +257,7 @@ tex.dyn.flipY = false;        // the shader flips to image space itself — don'
 
 const U = {
   tMaster: { value: null }, tDyn: { value: tex.dyn },
-  crop:  { value: new THREE.Vector4(0, 0, 1, 1) },
-  res:   { value: new THREE.Vector2(1, 1) },
+  sq: { value: new THREE.Vector4(0, 0, 1, 1) },
   ditherPx: { value: P.ditherPx }, smoothR: { value: P.smoothR },
   edgeAmt:  { value: P.edgeAmt },  flick:   { value: 1 },
   paper: { value: new THREE.Vector3(...P.paper) },
@@ -255,13 +271,13 @@ const quad = new THREE.Mesh(
 quad.frustumCulled = false;
 scene.add(quad);
 
-new THREE.TextureLoader().load("assets/facade.png?v=4", t => {
+new THREE.TextureLoader().load("assets/facade.png?v=5", t => {
   t.minFilter = t.magFilter = THREE.LinearFilter;    // LINEAR so the blur can recover tone
   t.generateMipmaps = false;
   t.flipY = false;                                   // shader works in image space
   t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
   tex.master = t; U.tMaster.value = t;
-  S.need = true; kick();
+  kick();
 });
 
 /* ------------------------------------------------------------------ layout -- */
@@ -273,22 +289,16 @@ function resize() {
   renderer.setSize(w, h, false);
   stage.style.width = w + "px"; stage.style.height = h + "px";
 
-  // COVER-fit the square master, keeping the building framed
-  const scale = Math.max(w / M, h / M);
-  const visW = w / scale, visH = h / scale;
-  const fx = Math.min(Math.max(768, visW / 2), M - visW / 2);
-  const fy = Math.min(Math.max(P.focusY, visH / 2), M - visH / 2);
-  S.view = { scale, fx, fy, visW, visH };
-  U.crop.value.set((fx - visW / 2) / M, (fy - visH / 2) / M,
-                   (fx + visW / 2) / M, (fy + visH / 2) / M);
-  U.res.value.set(w * S.dpr, h * S.dpr);
-  S.need = true; kick();
+  // a TRUE SQUARE, centred — the art is never stretched to the page
+  const size = Math.min(w, h);
+  S.sq = { x: (w - size) / 2, y: (h - size) / 2, size };
+  // gl_FragCoord has its origin bottom-left, so flip y for the shader
+  U.sq.value.set(S.sq.x * S.dpr, (h - S.sq.y - size) * S.dpr, size * S.dpr, size * S.dpr);
+  kick();
 }
 
-const m2c = (mx, my) => [ (mx - (S.view.fx - S.view.visW / 2)) * S.view.scale,
-                          (my - (S.view.fy - S.view.visH / 2)) * S.view.scale ];
-const c2m = (cx, cy) => [ cx / S.view.scale + (S.view.fx - S.view.visW / 2),
-                          cy / S.view.scale + (S.view.fy - S.view.visH / 2) ];
+const m2c = (mx, my) => [ S.sq.x + (mx / M) * S.sq.size, S.sq.y + (my / M) * S.sq.size ];
+const c2m = (cx, cy) => [ (cx - S.sq.x) / S.sq.size * M, (cy - S.sq.y) / S.sq.size * M ];
 
 /* ------------------------------------------------------------------ input -- */
 const inRect = (m, r) => m[0] >= r[0] && m[0] <= r[0] + r[2] && m[1] >= r[1] && m[1] <= r[1] + r[3];
@@ -296,24 +306,21 @@ const inRect = (m, r) => m[0] >= r[0] && m[0] <= r[0] + r[2] && m[1] >= r[1] && 
 function hitAt(cx, cy) {
   const m = c2m(cx, cy);
   if (inRect(m, R_CTA))   return "cta";
-  if (inRect(m, R_GRASS)) return "grass";
   if (inRect(m, R_SIGN))  return "sign";
-  return "enter";                       // the whole strip is the door
+  if (inRect(m, R_GRASS)) return "grass";
+  if (inRect(m, R_ENTER)) return "enter";
+  return null;                                     // sky and surround: just scenery
 }
-function setCursor(c) {
-  document.body.className = c ? "cur-" + c : "";
-}
+function setCursor(c) { document.body.className = c ? "cur-" + c : ""; }
+
 function onMove(e) {
-  const cx = e.clientX, cy = e.clientY;
-  S.ptr.x = cx; S.ptr.y = cy;
-  const h = hitAt(cx, cy);
-  if (h !== S.hot) {
-    S.hot = h;
-    const wasCta = S.hoverCta;
-    S.hoverCta = (h === "cta");
-    setCursor(h === "grass" || h === "sign" ? "hand" : "fwd");
-    if (wasCta !== S.hoverCta) { S.need = true; kick(); }
-  }
+  const h = hitAt(e.clientX, e.clientY);
+  if (h === S.hot) return;
+  S.hot = h;
+  const was = S.hoverCta;
+  S.hoverCta = (h === "cta");
+  setCursor(h === "cta" || h === "enter" ? "fwd" : (h ? "hand" : null));
+  if (was !== S.hoverCta) kick();
 }
 function enterMuseum() {
   SFX.creak();
@@ -328,17 +335,18 @@ function onDown(e) {
     return;
   }
   if (h === "sign") { SFX.knock(); flick(0.30, 900); return; }
-  enterMuseum();
+  // only a deliberate click on the building or the invitation opens the door
+  if (h === "cta" || h === "enter") enterMuseum();
 }
 function flick(amt, dur) { S.flickA = { t0: performance.now(), dur, amt }; kick(); }
 
 stage.addEventListener("pointermove", onMove);
 stage.addEventListener("pointerdown", onDown);
-stage.addEventListener("pointerleave", () => { S.hot = null; S.hoverCta = false; setCursor(null); S.need = true; kick(); });
+stage.addEventListener("pointerleave", () => { S.hot = null; S.hoverCta = false; setCursor(null); kick(); });
 window.addEventListener("resize", resize);
-window.addEventListener("pageshow", e => { if (e.persisted) { resize(); } });
-stage.addEventListener("webglcontextlost", e => { e.preventDefault(); });
-stage.addEventListener("webglcontextrestored", () => { resize(); });
+window.addEventListener("pageshow", e => { if (e.persisted) resize(); });
+stage.addEventListener("webglcontextlost", e => e.preventDefault());
+stage.addEventListener("webglcontextrestored", () => resize());
 
 /* ------------------------------------------------------------------- loop -- */
 function busy() { return !!(S.mouseRun || S.flickA); }
@@ -352,13 +360,12 @@ function frame(now) {
   }
   drawDyn(now);
   renderer.render(scene, cam);
-  S.need = false;
-  if (busy()) kick();
+  if (busy()) kick();                    // 60fps only while something is moving
 }
-// wall clock too — rAF is throttled inside a cross-origin iframe
-setInterval(() => { if (busy() || S.need) kick(); }, 120);
+// the stars breathe on a slow wall clock (rAF is throttled inside an iframe)
+setInterval(() => { if (!document.hidden) kick(); }, 95);
 
 resize();
 kick();
 
-window.__enter = { S, P, U, resize, kick, flick, mouse: () => { S.mouseRun = performance.now(); kick(); } };
+window.__enter = { S, P, U, resize, kick, flick, STARS, mouse: () => { S.mouseRun = performance.now(); kick(); } };
