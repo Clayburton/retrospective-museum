@@ -307,6 +307,8 @@ const cards = {
   "y17a": { id:"y17a", img:V+"gallery-mh.png", tone:"ink", room:"y17", ambient:"room",
     nav:{ right:"y17b", back:"rotunda" }, frames:[{ song:"no-good-reason", r:[402,564,246,276], plate:[485,966,82,30] },{ song:"currently-alone", r:[954,564,228,276], plate:[1026,966,83,30] }],
     hots:[ { r:[1280,1120,120,110], cur:"zoom", go:"mh-zoom1", t:"zoomOpen", spd:"fast", at:[1340,1170], sfx:"squeak" },
+           { r:[72,944,245,271], cur:"hand", fn:"radiatorSteam" },       // the old heater
+           { r:[476,1174,594,236], cur:"hand", sfx:"knock" },            // the bench — knock on wood
            ...bulbHots([[355,90],[1180,90]]) ],
     draw(ctx,H,S,t){ roomTitle(ctx,H,"2017",71); } },
 
@@ -337,7 +339,7 @@ const cards = {
   /* ---- mouse hole zoom sequence ---- */
   "mh-zoom1": { id:"mh-zoom1", img:V+"mh-zoom1.png", tone:"ink", room:"y17", ambient:"room",
     nav:{ back:"y17a" },
-    hots:[ { r:[540,620,320,320], cur:"zoom", go:"mh-zoom2", t:"zoomOpen", spd:"fast", at:[700,780] } ] },
+    hots:[ { r:[655,790,226,260], cur:"zoom", go:"mh-zoom2", t:"zoomOpen", spd:"fast", at:[768,920] } ] },
   "mh-zoom2": { id:"mh-zoom2", img:V+"mh-zoom2.png", tone:"ink", room:"y17", ambient:"room",
     nav:{ back:"mh-zoom1" },
     hots:[ { r:[500,500,540,540], cur:"zoom", go:"mousehole", t:"irisOpen", spd:"slow", at:[768,768] } ] },
@@ -472,6 +474,27 @@ const ACTIONS = {
     S.lastInput = performance.now();                     // don't let the idle flicker pile on
   },
 
+  /* the 2017 room's old heater — knock it and it lets off steam */
+  radiatorSteam(hot,H,S){
+    if (S.st.steaming) return;
+    S.st.steaming = 1;
+    H.sfx("clack"); setTimeout(()=>H.sfx("hiss"), 180);
+    H.anim("y17a", 2600, (ctx,k)=>{
+      for (let i = 0; i < 4; i++) {                      // wisps rising off the top, fading as they climb
+        const ph = (k * 1.15 + i * 0.27) % 1;
+        const x = 128 + i * 46 + Math.sin((ph * 3.1 + i) * 2.2) * 26;
+        const y = 940 - ph * 330;
+        const a = Math.sin(Math.PI * ph) * 0.42 * (1 - k * 0.35);
+        if (a <= 0.01) continue;
+        const rr = 18 + ph * 46;
+        const gr = ctx.createRadialGradient(x, y, 1, x, y, rr);
+        gr.addColorStop(0, `rgba(246,243,233,${a.toFixed(3)})`);
+        gr.addColorStop(1, "rgba(246,243,233,0)");
+        ctx.fillStyle = gr; ctx.beginPath(); ctx.arc(x, y, rr, 0, 7); ctx.fill();
+      }
+    }, ()=>{ S.st.steaming = 0; S.A.dirty = true; });
+  },
+
   /* street */
   skyUFO(hot,H,S){
     const st=S.st;
@@ -508,18 +531,12 @@ const ACTIONS = {
   /* hallway picture zoom */
   toFrame(hot,H,S){ S.st.hframePic = hot.pic; H.go("hframe",{ t:"zoomOpen", spd:"fast" }); },
 
-  /* mouse hole — poke the mouse and it drops what it was sitting on */
+  /* mouse hole — poke the mouse and it shifts just enough to uncover the key (it stays put) */
   mouseSqueak(hot,H,S){
     H.sfx("squeak");
     if (S.st.keyShown || S.st.hasKey) return;
-    S.st.keyShown = 1;                                  // startled — the janitor's key is under it
+    S.st.keyShown = 1;
     setTimeout(()=>H.sfx("keys"), 240);
-    H.anim("mousehole", 620, (ctx,k)=>{                 // it skitters off to the right
-      ctx.fillStyle="rgb(20,20,18)"; ctx.globalAlpha=1-k*0.85;
-      const x=930+k*430, y=795+Math.sin(k*30)*4;
-      ctx.beginPath(); ctx.ellipse(x,y,42,22,0.04,0,7); ctx.fill();
-      ctx.beginPath(); ctx.arc(x+30,y-6,17,0,7); ctx.fill();
-    }, ()=>{ S.A.dirty=true; });
     S.A.dirty=true;
   },
   takeKey(hot,H,S){
