@@ -69,7 +69,7 @@ function loadImg(name) {
     i.src = V + name + ".png?av=9"; IMG[name] = i; }
   return IMG[name];
 }
-["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-bat1","el-bat2",
+["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-lamp-mask","el-bat1","el-bat2",
  "el-eye1","el-eye2","el-eye3","el-eye4","el-eye5","el-eye6"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
@@ -170,8 +170,12 @@ function starfield(H, S) {
   const mg = mk.getContext("2d");
   const id = mg.createImageData(96, 96);
   for (let y = 0; y < 96; y++) for (let x = 0; x < 96; x++) {
-    const b = H.sampleBg((x + 0.5) / 96 * M, (y + 0.5) / 96 * M);
-    const a = b < 0.30 ? 255 : b < 0.46 ? Math.round((0.46 - b) / 0.16 * 255) : 0;
+    const my = (y + 0.5) / 96 * M;
+    const b = H.sampleBg((x + 0.5) / 96 * M, my);
+    let a = b < 0.30 ? 255 : b < 0.46 ? Math.round((0.46 - b) / 0.16 * 255) : 0;
+    // stars belong in the SKY — fade them out before the ground so none land on
+    // the pavement either side of the road
+    if (my > 620) a = Math.round(a * Math.max(0, 1 - (my - 620) / 180));
     const i = (y * 96 + x) * 4;
     id.data[i] = id.data[i+1] = id.data[i+2] = 255; id.data[i+3] = a;
   }
@@ -221,36 +225,9 @@ function filmStop() {
 /* the hallway picture frame's real opening in the art (detected, not guessed) */
 const HFRAME_R = [343, 332, 853, 870];
 
-/* ---- the right-hand picture is a window onto a 1988 Macintosh ----
-   The Manhole (Cyan, 1988) is the granddaddy of this whole museum, and the
-   Internet Archive runs it in-browser and publishes an embed player for it.
-   We point at THEIR player — nothing is copied or re-hosted here — and sit it
-   inside the frame's opening so the painting really is a working old Mac.      */
-const MANHOLE_EMBED = "https://archive.org/embed/TheManholeMacintosh";
-let MH_IF = null;
-function mhFit() {
-  const st = document.getElementById("stage");
-  if (!MH_IF || !st) return;
-  const r = st.getBoundingClientRect(), sc = r.width / M;
-  MH_IF.style.left   = (r.left + HFRAME_R[0]*sc) + "px";
-  MH_IF.style.top    = (r.top  + HFRAME_R[1]*sc) + "px";
-  MH_IF.style.width  = (HFRAME_R[2]*sc) + "px";
-  MH_IF.style.height = (HFRAME_R[3]*sc) + "px";
-}
-function mhShow(on) {
-  if (!on) { if (MH_IF) { MH_IF.remove(); MH_IF = null; } return; }
-  if (MH_IF) { mhFit(); return; }
-  MH_IF = document.createElement("iframe");
-  MH_IF.id = "manholeFrame";
-  MH_IF.setAttribute("frameborder", "0");
-  MH_IF.setAttribute("allowfullscreen", "");
-  MH_IF.allow = "autoplay; fullscreen";
-  MH_IF.style.cssText = "position:absolute;border:0;z-index:6;background:#000;";
-  MH_IF.src = MANHOLE_EMBED;
-  document.body.appendChild(MH_IF);
-  mhFit();
-}
-window.addEventListener("resize", mhFit);
+/* The playable-Manhole-in-the-frame experiment is removed for now — see the
+   note in CLAUDE.md. The right picture is simply a picture again. */
+function mhShow() {}
 
 /* the eye in the left hallway picture — six frames, open → shut → open */
 const EYE_SEQ = [[1,90],[2,70],[3,70],[4,180],[5,110],[6,130]];
@@ -261,6 +238,14 @@ function eyeFrame(S, t) {
   if (e < 0 || e >= EYE_MS) return 1;
   for (const [f,d] of EYE_SEQ) { if (e < d) return f; e -= d; }
   return 1;
+}
+
+/* offscreen the saucer is composited in, so the lamp can be punched out of it */
+let UFO_CV = null;
+function ufoCv(w, h) {
+  if (!UFO_CV) UFO_CV = document.createElement("canvas");
+  if (UFO_CV.width !== w || UFO_CV.height !== h) { UFO_CV.width = w; UFO_CV.height = h; }
+  return UFO_CV;
 }
 
 /* offscreen the mirror reflection is composited in, so it can be masked to the glass */
@@ -605,17 +590,8 @@ const cards = {
       // the picture FILLS its frame; the frame masks whatever spills over
       if (n === 1) {
         elemCover(ctx, "el-eye" + eyeFrame(S,t), R[0], R[1], R[2], R[3]);     // the eye that blinks
-      } else if (S.st.manhole) {
-        /* the Archive's emulator is a real iframe sitting over this opening */
       } else {
         elemCover(ctx, "el-hpic2", R[0], R[1], R[2], R[3]);
-        // a small invitation, in the museum's own sticker style
-        const pw = 470, ph = 84, px = 768 - pw/2, py = R[1] + R[3] - 132;
-        ctx.fillStyle = "rgb(244,241,232)"; ctx.fillRect(px, py, pw, ph);
-        ctx.strokeStyle = "#101010"; ctx.lineWidth = 4;
-        ctx.strokeRect(px + 6, py + 6, pw - 12, ph - 12);
-        H.type(ctx, "· play the manhole ·", 768, py + ph/2,
-               { cells:4.2, align:"center", color:"#101010", plain:true, seed:61 });
       }
     },
   },
@@ -806,8 +782,19 @@ const ACTIONS = {
     if (st.ufoFlying) return;
     st.ufoFlying=1; H.sfx("whisper");
     H.anim("street", 3000, (ctx,k)=>{
-      const x = -300 + k*2100, y = 240 + Math.sin(k*3.14)*(-60);
-      elemWhite(ctx,"el-ufo", x, y, 360, 118);   // black line art → white, or it's invisible up there
+      const x = -300 + k*2100, y = 240 + Math.sin(k*3.14)*(-60), w = 360, h = 118;
+      // render the saucer offscreen and punch the lamp out of it, so it passes
+      // BEHIND the streetlamp instead of sailing over the top of it
+      const cv = ufoCv(w, h), g = cv.getContext("2d");
+      g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,w,h);
+      elemWhite(g,"el-ufo", 0, 0, w, h);         // black line art → white, or it's invisible up there
+      const mk = IMG["el-lamp-mask"];
+      if (mk && mk.complete && mk.naturalWidth) {
+        g.globalCompositeOperation = "destination-out";
+        g.drawImage(mk, -x, -y, M, M);           // the mask is full-frame in master coords
+        g.globalCompositeOperation = "source-over";
+      }
+      ctx.drawImage(cv, x, y);
     }, ()=>{ st.ufoFlying=0; st.starsOut=1; starsBg(true); S.A.dirty=true; H.sfx("musicbox"); });
   },
   // the storm grate in the road — something drops away underneath
@@ -885,14 +872,7 @@ const ACTIONS = {
 
   /* whichever picture you're stood in front of, poking it does its own thing */
   framePoke(hot,H,S){
-    if ((S.st.hframePic || 1) === 2) {              // the right one is a 1988 Macintosh
-      if (S.st.manhole) return;                     // already running — let the emulator have the clicks
-      S.st.manhole = 1;
-      H.sfx("clack"); setTimeout(()=>H.sfx("bellLow"), 220);
-      mhShow(true);
-      S.A.dirty = true;
-      return;
-    }
+    if ((S.st.hframePic || 1) === 2) { H.sfx("knock"); return; }   // just a picture, for now
     ACTIONS.blinkEye(hot,H,S);
   },
 
