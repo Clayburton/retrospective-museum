@@ -862,7 +862,14 @@ function boot() {
   pickFaces();
   const start = qs.get("card") && W.cards[qs.get("card")] ? qs.get("card") : W.start;
   const card = W.cards[start];
+  const LD = window.LOADER;
+  if (LD) {                                       // the first master + the web fonts
+    LD.expect(2);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(() => LD.did());
+    else LD.did();
+  }
   ensureMaster(card, () => {
+    LD && LD.did();
     S.A = { card, dyn: mkDyn(card), dirty: true };
     S.cur = start;
     card.enter && card.enter(H, S);
@@ -871,6 +878,7 @@ function boot() {
     resize();
     READY = true;
     document.body.classList.add("ready");
+    LD && LD.engineReady();                       // the first card has painted — the loader may lift
     broadcastTone(card.tone || "ink");
     AUDIO.setRoom(card.room || "ent", card.depth);
     prefetchNeighbors(card);

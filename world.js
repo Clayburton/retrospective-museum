@@ -62,11 +62,15 @@ const ALBUM11 = ["laputa","intro","no-good-reason","currently-alone","casino","w
 const IMG = {};
 function loadImg(name) {
   if (!IMG[name]) { const i = new Image();
-    i.onload = () => { if (window.__mus) { window.__mus.state.A && (window.__mus.state.A.dirty = true); window.__mus.renderOnce(); } };
+    const L = window.LOADER; L && L.expect(1);
+    const tick = () => { L && L.did(); };
+    i.onload = () => { tick(); if (window.__mus) { window.__mus.state.A && (window.__mus.state.A.dirty = true); window.__mus.renderOnce(); } };
+    i.onerror = tick;                                   // a missing element must not stall the loader
     i.src = V + name + ".png?av=9"; IMG[name] = i; }
   return IMG[name];
 }
-["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-bat1","el-bat2"].forEach(loadImg);
+["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-bat1","el-bat2",
+ "el-eye1","el-eye2","el-eye3","el-eye4","el-eye5","el-eye6"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
 const SAVE_K = "retro.state";
@@ -200,6 +204,20 @@ function filmPlay() {
 function filmStop() {
   if (FILM.video) FILM.video.pause();
   FILM.on = false;
+}
+
+/* the hallway picture frame's real opening in the art (detected, not guessed) */
+const HFRAME_R = [343, 332, 853, 870];
+
+/* the eye in the left hallway picture — six frames, open → shut → open */
+const EYE_SEQ = [[1,90],[2,70],[3,70],[4,180],[5,110],[6,130]];
+const EYE_MS  = EYE_SEQ.reduce((a,b)=>a+b[1],0);
+function eyeFrame(S, t) {
+  if (!S.st.eyeT0) return 1;                       // at rest it is wide open
+  let e = t - S.st.eyeT0;
+  if (e < 0 || e >= EYE_MS) return 1;
+  for (const [f,d] of EYE_SEQ) { if (e < d) return f; e -= d; }
+  return 1;
 }
 
 /* offscreen the mirror reflection is composited in, so it can be masked to the glass */
@@ -493,11 +511,14 @@ const cards = {
   "hframe": {
     id:"hframe", img:V+"hframe.png", tone:"ink", room:"ent", ambient:"hall", depth:3,
     nav:{ back:"hall-2" },
+    hots:[ { r:HFRAME_R, cur:"hand", fn:"blinkEye" } ],
     draw(ctx,H,S,t){
-      const n = S.st.hframePic || 1;
-      // the frame opening is black; fit the (black-bg) picture inside it
-      ctx.fillStyle = "#000"; ctx.fillRect(452, 360, 632, 632);
-      elem(ctx, "el-hpic"+n, 452, 400, 632, 552);
+      const n = S.st.hframePic || 1, R = HFRAME_R, m = 26;   // m = the mat around the picture
+      // the frame opening is black; the picture is matted inside it
+      ctx.fillStyle = "#000"; ctx.fillRect(R[0], R[1], R[2], R[3]);
+      const bx = R[0]+m, by = R[1]+m, bw = R[2]-m*2, bh = R[3]-m*2;
+      if (n === 1) elem(ctx, "el-eye" + eyeFrame(S,t), bx, by, bw, bh);       // the eye that blinks
+      else         elem(ctx, "el-hpic" + n, bx, by, bw, bh);
     },
   },
 
@@ -756,6 +777,21 @@ const ACTIONS = {
 
   /* hallway picture zoom */
   toFrame(hot,H,S){ S.st.hframePic = hot.pic; H.go("hframe",{ t:"zoomOpen", spd:"fast" }); },
+
+  /* click the eye and it blinks shut, then opens again */
+  blinkEye(hot,H,S){
+    if ((S.st.hframePic || 1) !== 1) return;        // only the left picture is the eye
+    if (S.st.eyeT0) return;                         // mid-blink
+    S.st.eyeT0 = performance.now();
+    H.sfx("tickSoft");
+    cards["hframe"].live = true;                    // animate while it blinks
+    window.__mus && window.__mus.wake();
+    setTimeout(()=>{                                // wall-clock, so a throttled tab can't stick it shut
+      S.st.eyeT0 = 0; cards["hframe"].live = false;
+      S.A.dirty = true; window.__mus && window.__mus.renderOnce();
+    }, EYE_MS + 80);
+    S.A.dirty = true;
+  },
 
   /* mouse hole — poke the mouse and it shifts just enough to uncover the key (it stays put) */
   mouseSqueak(hot,H,S){

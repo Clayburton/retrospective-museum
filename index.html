@@ -10,7 +10,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Courier+Prime:ital,wght@0,400;0,700;1,400&family=Special+Elite&display=swap">
-<link rel="stylesheet" href="styles.css?v=78">
+<link rel="stylesheet" href="styles.css?v=80">
 </head>
 <body class="cur-arrow">
   <canvas id="stage"></canvas>
@@ -18,10 +18,67 @@
   <input id="gbInput" type="text" maxlength="34" autocomplete="off" spellcheck="false"
          aria-label="sign the guest book" placeholder="">
   <div id="boot" aria-hidden="true"></div>
-  <script src="gbfilter.js?v=78"></script>
-  <script src="world.js?v=78"></script>
-  <script src="viz.js?v=78"></script>
-  <script src="audio.js?v=78"></script>
-  <script src="engine.js?v=78"></script>
+
+  <!-- ============ the loading card: a System-6 dialog, drawn in one bit ============ -->
+  <div id="loader">
+    <div class="ld-win" role="status" aria-live="polite">
+      <div class="ld-chrome"><span></span><span></span><span></span><span></span><span></span><span></span></div>
+      <div class="ld-body">
+        <div class="ld-title">[ retrospective ]</div>
+        <div class="ld-sub">clay and kelsy &middot; 2013&ndash;2019</div>
+        <div class="ld-bar"><i id="ldFill"></i></div>
+        <div class="ld-status"><span id="ldMsg">opening the museum</span><span id="ldPct">0%</span></div>
+      </div>
+    </div>
+  </div>
+  <script>
+  /* Tracks the things boot actually waits on (fonts, the first master, every
+     preloaded element) and only lifts once they're in AND the engine has painted
+     — with a floor on the display time so it reads as a title card, not a flash. */
+  window.LOADER = (function () {
+    var total = 0, done = 0, engineUp = false, gone = false;
+    var t0 = Date.now(), MIN = 1100;
+    var fill = document.getElementById("ldFill"),
+        pct  = document.getElementById("ldPct"),
+        msg  = document.getElementById("ldMsg"),
+        box  = document.getElementById("loader");
+    var shown = 0;                                  // eased, so the bar never jumps
+    var STEPS = ["opening the museum", "unrolling the carpet", "dusting the frames",
+                 "winding the clocks", "letting the bats in"];
+    function frac() { return total ? Math.min(1, done / total) : 0; }
+    function paint() {
+      var want = frac() * (engineUp ? 1 : 0.92);
+      shown += (want - shown) * 0.18;
+      if (want - shown < 0.004) shown = want;
+      var p = Math.round(shown * 100);
+      if (fill) fill.style.width = p + "%";
+      if (pct)  pct.textContent = p + "%";
+      if (msg)  msg.textContent = STEPS[Math.min(STEPS.length - 1, Math.floor(shown * STEPS.length))];
+      if (!gone && engineUp && frac() >= 1 && shown > 0.995 && Date.now() - t0 > MIN) {
+        gone = true;
+        box && box.classList.add("is-gone");
+        setTimeout(function () { box && box.parentNode && box.parentNode.removeChild(box); }, 620);
+        return;
+      }
+      requestAnimationFrame(paint);
+    }
+    // rAF is throttled in background tabs / iframes — a wall clock keeps it honest
+    setInterval(function () { if (!gone) paint(); }, 120);
+    requestAnimationFrame(paint);
+    return {
+      expect: function (n) { total += (n || 1); },
+      did:    function ()  { done++; },
+      engineReady: function () { engineUp = true; },
+      bail:   function ()  { engineUp = true; total = Math.max(total, 1); done = total; }
+    };
+  }());
+  setTimeout(function () { window.LOADER && window.LOADER.bail(); }, 15000);  // never strand a visitor
+  </script>
+
+  <script src="gbfilter.js?v=80"></script>
+  <script src="world.js?v=80"></script>
+  <script src="viz.js?v=80"></script>
+  <script src="audio.js?v=80"></script>
+  <script src="engine.js?v=80"></script>
 </body>
 </html>
