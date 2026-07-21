@@ -334,7 +334,9 @@ const MOON = { cx: 1281, cy: 176, r: 105 };
    He's inscribed IN the disc instead, which reads as cut-paper silhouette and
    lets him be big enough to see. Sized so his head grazes the top of the moon
    and the ripple sits near the bottom; ink spans y78..548 of the 627 frame. */
-const FISH = { sz: 276, x: 1143, y: 38 };
+/* Dropped so his seat lands on the cloud band that crosses the moon — measured
+   by scanning beside the disc, the cloud runs y205..260, so seat ~215. */
+const FISH = { sz: 276, x: 1143, y: 76 };
 const FISH_X = () => FISH.x;
 const FISH_Y = () => FISH.y;
 const FISH_SEQ = [[2, 300], [3, 320], [4, 900]];         // frame, ms — the catch
@@ -373,7 +375,14 @@ function drawFisher(ctx, S, t) {
    glass — the bell's outline stopped the flood, so the bell is excluded from
    the mask and therefore always stays in FRONT of him.                        */
 const BOOTH = [1287, 573, 114, 363];        // the pane, measured off the art
-const REC = { w: 250, cx: 1352, y: 566 };   // his size and where he settles
+/* His ink touches the very edge of its own bbox — trunk tip at local x0, top of
+   his head at local y0 — so any crop at those edges clips the nose and makes the
+   head flicker against the mask boundary. Inset him from both, and keep him
+   short enough that his neck stops above the bell. */
+/* The pane is 114 wide against a 346-wide sprite, so he can't be big AND whole.
+   Sized so nearly all of him reads inside the glass: trunk tip 6px in from the
+   left, head 19px below the top, base well clear of the bell. */
+const REC = { w: 122, cx: 1354, y: 592 };
 const REC_FPS = 11;
 const REC_IN_MS = 950;                       // rising into the window
 const REC_LINES = [
@@ -381,7 +390,7 @@ const REC_LINES = [
   "Please sign the guest book in the rotunda",
   "I seem to have lost my key to the theater and Photo Booth...",
 ];
-const REC_CPS = 30;
+const REC_CPS = 20;                          // slow enough that one toot per letter reads as speech
 
 function recFrame(S, t) {
   const n = Math.floor(t / 1000 * REC_FPS) % 12 + 1;
@@ -412,7 +421,7 @@ function drawSpeech(ctx, H, S, t) {
   if (st.recState !== 3 || st.recSayT0 == null) return;
   const full = REC_LINES[st.recLine % REC_LINES.length];
   const shown = Math.max(0, Math.floor((t - st.recSayT0) / 1000 * REC_CPS));
-  const R = [612, 470, 620, 214];
+  const R = [500, 400, 740, 330];
   ctx.save();
   ctx.fillStyle = "rgb(246,243,235)"; ctx.fillRect(R[0], R[1], R[2], R[3]);
   ctx.strokeStyle = "#101010"; ctx.lineWidth = 5;
@@ -427,8 +436,8 @@ function drawSpeech(ctx, H, S, t) {
   ctx.moveTo(R[0] + R[2] - 4, R[1] + 118); ctx.lineTo(R[0] + R[2] + 82, R[1] + 150);
   ctx.lineTo(R[0] + R[2] - 4, R[1] + 176); ctx.stroke();
   ctx.restore();
-  H.wrap(ctx, full, R[0] + 34, R[1] + 56,
-         { cells: 5.2, maxW: R[2] - 68, lh: 1.55, chars: shown, color: "#101010", plain: true, seed: 300 });
+  H.wrap(ctx, full, R[0] + 40, R[1] + 74,
+         { cells: 7.6, maxW: R[2] - 80, lh: 1.5, chars: shown, color: "#101010", plain: true, seed: 300 });
 }
 
 /* text under the pictures reads small on a phone — nudge it up when the
@@ -938,10 +947,10 @@ const ACTIONS = {
     st.recState = 3; st.recSayT0 = performance.now();
     const line = REC_LINES[st.recLine];
     const dur = line.length / REC_CPS * 1000;
-    // one short toot every few characters, so it reads as speech not a beep
+    // one toot per letter, in step with the typing
     st.recToots = [];
-    for (let i = 0; i < Math.ceil(line.length / 5); i++)
-      st.recToots.push(setTimeout(()=>H.sfx("eleph"), i * (5 / REC_CPS * 1000)));
+    for (let i = 0; i < line.length; i++)
+      if (line[i] !== " ") st.recToots.push(setTimeout(()=>H.sfx("eleph"), i / REC_CPS * 1000));
     clearTimeout(st.recDone);
     st.recDone = setTimeout(()=>{                           // back to idling when he's finished
       if (S.st.recState === 3) { S.st.recState = 2; S.A.dirty = true;

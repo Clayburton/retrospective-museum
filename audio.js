@@ -238,16 +238,25 @@ const SFX = {
                for (const w of [0.12, 0.37, 0.55, 0.86, 1.04]) burst(0.014, 0.20, 900, "bandpass", w); },
   /* the receptionist's voice — a very short digital elephant toot. Four variants
      cycled round-robin so a line of dialogue never sounds like one repeated bleep. */
-  eleph()    { const t0 = ctx.currentTime;
+  eleph()    { // low, buzzy, and unmistakably a synthesised elephant: a sawtooth
+               // blare pulled down through a resonant filter, plus a detuned
+               // second voice so it honks rather than beeps
+               const t0 = ctx.currentTime;
                ELEPH_I = (ELEPH_I + 1) % 4;
-               const V = [[420, 760], [500, 300], [360, 620], [610, 380]][ELEPH_I];
-               const o = ctx.createOscillator(); o.type = "square";
-               o.frequency.setValueAtTime(V[0], t0);
-               o.frequency.exponentialRampToValueAtTime(V[1], t0 + 0.085);
-               const f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.value = 1500;
-               const g = ctx.createGain(); env(g, t0, 0.006, 0.05, 0.09);
-               o.connect(f); f.connect(g); g.connect(sfxBus); o.start(t0); o.stop(t0 + 0.2);
-               burst(0.03, 0.03, 900, "bandpass", 0.01); },
+               const V = [[196, 118], [232, 150], [168, 108], [258, 132]][ELEPH_I];
+               const g = ctx.createGain(); env(g, t0, 0.008, 0.045, 0.10);
+               const f = ctx.createBiquadFilter(); f.type = "lowpass";
+               f.frequency.setValueAtTime(1100, t0);
+               f.frequency.exponentialRampToValueAtTime(420, t0 + 0.10);
+               f.Q.value = 7;                                    // the nasal resonance
+               for (const [type, mul, lvl] of [["sawtooth", 1, 1], ["square", 1.005, 0.5]]) {
+                 const o = ctx.createOscillator(); o.type = type;
+                 o.frequency.setValueAtTime(V[0] * mul, t0);
+                 o.frequency.exponentialRampToValueAtTime(V[1] * mul, t0 + 0.10);
+                 const og = ctx.createGain(); og.gain.value = lvl;
+                 o.connect(og); og.connect(f); o.start(t0); o.stop(t0 + 0.16);
+               }
+               f.connect(g); g.connect(sfxBus); },
   bats()     { // a low-bit flurry: squeaky square-wave chirps + leathery wingbeats
                const t0 = ctx.currentTime;
                for (let i = 0; i < 18; i++) {
