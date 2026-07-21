@@ -229,9 +229,20 @@ const HFRAME_R = [343, 332, 853, 870];
 /* the right-hand picture is really three: poke it and it dissolves to the next */
 const HPIC2_SEQ = ["el-hpic2", "el-hpic2b", "el-hpic2c"];
 
-/* the guest book's way out. It sits BELOW the invisible keystroke-catcher input
-   so the click actually reaches the canvas — people were getting stuck in here. */
+/* The guest book's bottom bar. All three sit BELOW the invisible keystroke-catcher
+   input so the clicks actually reach the canvas — people were getting stuck. */
 const GB_CLOSE = [524, 1306, 488, 96];
+const GB_PREV  = [206, 1306, 190, 96];      // ◄ back through the older pages
+const GB_NEXT  = [1140, 1306, 190, 96];     // ► forward again to the page being filled
+const GB_PER_PAGE = 8;                      // signatures per leaf
+
+function gbPageCount(){ return Math.max(1, Math.ceil(GB.all().length / GB_PER_PAGE)); }
+/* which leaf is on screen — defaults to the LAST one, the page still being filled */
+function gbPage(S){
+  const last = gbPageCount() - 1;
+  const p = (S.st.gbPage == null) ? last : S.st.gbPage;
+  return Math.max(0, Math.min(last, p));
+}
 
 /* The playable-Manhole-in-the-frame experiment is removed for now — see the
    note in CLAUDE.md. The right picture is simply a picture again. */
@@ -673,29 +684,55 @@ const cards = {
   "guestbook": {
     id:"guestbook", proc:"guestbook", tone:"paper", room:"rot", ambient:"rot", dynRes:1254, live:true,
     nav:{ back:"rotunda" },
-    hots:[ { r:GB_CLOSE, cur:"back", go:"rotunda", t:"dissolve", spd:"fast" } ],
+    hots:[ { r:GB_CLOSE, cur:"back", go:"rotunda", t:"dissolve", spd:"fast" },
+           { r:GB_PREV,  cur:"left",  fn:"gbFlip", d:-1 },
+           { r:GB_NEXT,  cur:"right", fn:"gbFlip", d: 1 } ],
     after(H,S){ GB.show(H,S); },
     leave(H,S){ GB.hide(); },
     draw(ctx,H,S,t){
       H.type(ctx,"GUEST BOOK", 768, 400, {cells:9,align:"center",alpha:1,color:"#101010",plain:true,seed:121,spacing:0.16});
       H.type(ctx,"[retrospective]  ·  sign below", 768, 452, {cells:4,align:"center",alpha:0.9,color:"#101010",plain:true,seed:122});
       const entries = GB.all();
+      const pages = gbPageCount(), page = gbPage(S), onLast = (page === pages - 1);
       let y = 620;
-      for (const e of entries.slice(-8)){ H.type(ctx, e, 250, y, {cells:5.5,alpha:1,color:"#101010",plain:true,seed:y}); y+=70; }
-      // the live line you're typing — through the dither, with a blinking caret
-      const buf = S.st.gbBuf || "";
-      const caret = (Math.floor(t/500)%2===0) ? "|" : " ";
-      H.type(ctx, (buf||"") + caret, 250, y, {cells:5.5,alpha:1,color:"#101010",plain:true,seed:99});
-      S.st.gbLineY = y;
-      // an unmissable way out — people were getting stranded in the book
-      H.type(ctx,"press ENTER to sign  ·  ESC to close", 768, 1250,
-             {cells:3.6,align:"center",alpha:0.62,color:"#101010",plain:true,seed:123});
-      const R = GB_CLOSE;
-      ctx.fillStyle="rgb(244,241,232)"; ctx.fillRect(R[0],R[1],R[2],R[3]);
-      ctx.strokeStyle="#101010"; ctx.lineWidth=4;
-      ctx.strokeRect(R[0],R[1],R[2],R[3]);
-      ctx.strokeRect(R[0]+7,R[1]+7,R[2]-14,R[3]-14);
-      H.type(ctx,"[ close the book ]", 768, R[1]+R[3]/2,
+      for (const e of entries.slice(page*GB_PER_PAGE, page*GB_PER_PAGE + GB_PER_PAGE)){
+        H.type(ctx, e, 250, y, {cells:5.5,alpha:1,color:"#101010",plain:true,seed:y}); y+=70;
+      }
+      // you only sign the leaf that's still being filled
+      if (onLast){
+        const buf = S.st.gbBuf || "";
+        const caret = (Math.floor(t/500)%2===0) ? "|" : " ";
+        H.type(ctx, (buf||"") + caret, 250, y, {cells:5.5,alpha:1,color:"#101010",plain:true,seed:99});
+        S.st.gbLineY = y;
+      }
+
+      // which leaf you're on
+      H.type(ctx, "page " + (page+1) + " of " + pages, 768, 1250,
+             {cells:3.6,align:"center",alpha:0.6,color:"#101010",plain:true,seed:125});
+      H.type(ctx, onLast ? "press ENTER to sign  ·  ESC to close" : "· an earlier page ·", 768, 1206,
+             {cells:3.4,align:"center",alpha:0.55,color:"#101010",plain:true,seed:123});
+
+      const plate = (R, on) => {
+        ctx.globalAlpha = on ? 1 : 0.22;
+        ctx.fillStyle="rgb(244,241,232)"; ctx.fillRect(R[0],R[1],R[2],R[3]);
+        ctx.strokeStyle="#101010"; ctx.lineWidth=4;
+        ctx.strokeRect(R[0],R[1],R[2],R[3]);
+        ctx.strokeRect(R[0]+7,R[1]+7,R[2]-14,R[3]-14);
+        ctx.globalAlpha = 1;
+      };
+      const chevron = (R, dir, on) => {
+        const cx = R[0]+R[2]/2, cy = R[1]+R[3]/2, w = 26, h = 30;
+        ctx.save(); ctx.globalAlpha = on ? 1 : 0.22;
+        ctx.fillStyle = "#101010"; ctx.beginPath();
+        // dir -1 points LEFT (older leaves), +1 points RIGHT (newer)
+        ctx.moveTo(cx - dir*w, cy - h); ctx.lineTo(cx + dir*w, cy); ctx.lineTo(cx - dir*w, cy + h);
+        ctx.closePath(); ctx.fill(); ctx.restore();
+      };
+      // ◄ older leaves            [ close the book ]            newer leaves ►
+      plate(GB_PREV, page > 0);        chevron(GB_PREV, -1, page > 0);
+      plate(GB_NEXT, !onLast);         chevron(GB_NEXT,  1, !onLast);
+      plate(GB_CLOSE, true);
+      H.type(ctx,"[ close the book ]", 768, GB_CLOSE[1]+GB_CLOSE[3]/2,
              {cells:5,align:"center",color:"#101010",plain:true,seed:124,spacing:0.02});
     },
   },
@@ -888,6 +925,15 @@ const ACTIONS = {
       ctx.beginPath(); ctx.ellipse(1075,980,120+k*30,175+k*34,0,0,7); ctx.stroke(); });
   },
 
+  /* turn a leaf of the guest book */
+  gbFlip(hot,H,S){
+    const last = gbPageCount() - 1, cur = gbPage(S), want = cur + hot.d;
+    if (want < 0 || want > last){ H.sfx("tickSoft"); return; }   // no leaf that way
+    S.st.gbPage = (want === last) ? null : want;                 // null = follow the newest
+    H.sfx("flap");
+    S.A.dirty = true;
+  },
+
   /* hallway picture zoom */
   toFrame(hot,H,S){ S.st.hframePic = hot.pic; H.go("hframe",{ t:"zoomOpen", spd:"fast" }); },
 
@@ -1009,7 +1055,7 @@ const GB = {
   show(H,S){
     const el=this.input||(this.input=document.getElementById("gbInput"));
     document.body.classList.add("gb-open");
-    S.st.gbBuf=""; el.value="";
+    S.st.gbBuf=""; el.value=""; S.st.gbPage=null;      // always open on the leaf being filled
     this.fetchRemote(()=>{ S.A&&(S.A.dirty=true); window.__mus&&window.__mus.renderOnce(); });
     el.oninput=()=>{ S.st.gbBuf=el.value; };
     el.onkeydown=e=>{
@@ -1038,6 +1084,7 @@ const GB = {
   save(line,H,S){
     try{ const mine=JSON.parse(localStorage.getItem("retro.gb")||"[]"); mine.push(line); localStorage.setItem("retro.gb",JSON.stringify(mine.slice(-40))); }catch(e){}
     if (this.remote) this.remote.push(line);
+    S.st.gbPage = null;                        // a signature always lands you on the newest leaf
     S.A&&(S.A.dirty=true); window.__mus&&window.__mus.renderOnce();
     fetch(GB_URL,{ method:"POST", headers:{"content-type":"application/json"}, body:JSON.stringify({line}) })
       .then(r=>{ if(r.ok) this.fetchRemote(()=>window.__mus&&window.__mus.renderOnce()); }).catch(()=>{});
