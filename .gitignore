@@ -1,0 +1,11 @@
+# runtime state (written by tools/serve.py, not source)
+guestbook.json
+
+# mac cruft
+.DS_Store
+**/.DS_Store
+
+# raw source art — kept locally, re-ingested into assets/art/*.png (the served masters)
+assets/art/Better art/
+assets/art/Old art/
+assets/art/orig/

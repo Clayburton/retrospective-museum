@@ -1,0 +1,72 @@
+/* [retrospective] museum — 1-bit world. No position:fixed (WP iframe rule). */
+
+html, body {
+  margin: 0; padding: 0;
+  width: 100%; height: 100%;
+  background: #101010;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#stage {
+  position: absolute; left: 0; top: 0;
+  display: block;
+  touch-action: none;
+  image-rendering: pixelated;              /* fixed backing, crisp scale — detail never changes */
+  image-rendering: crisp-edges;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#overlay { /* debug hotspot outlines (?debug=1) */
+  position: absolute; inset: 0;
+  width: 100%; height: 100%;
+  display: none;
+  pointer-events: none;
+}
+body.debug #overlay { display: block; }
+
+/* boot veil: ink until the first card has painted (prevents white flash into the dark facade) */
+#boot {
+  position: absolute; inset: 0;
+  background: #101010;
+  pointer-events: none;
+  transition: opacity .5s ease;
+}
+body.ready #boot { opacity: 0; }
+
+/* ---- guest book input: typewriter on the ledger ---- */
+/* invisible capture field — the visible, blinking, DITHERED text is drawn on
+   the canvas (world.js guestbook). This just catches keystrokes + the mobile keyboard. */
+#gbInput {
+  position: absolute;
+  display: none;
+  left: 0; top: 0; width: 100%; height: 60%;
+  background: transparent;
+  border: 0; outline: 0;
+  opacity: 0;
+  font-size: 16px;                 /* ≥16px so iOS doesn't zoom on focus */
+  caret-color: transparent;
+  padding: 0;
+}
+body.gb-open #gbInput { display: block; }
+
+/* ---- cursors (1-bit PNGs, hotspot baked into rule) ---- */
+body.cur-arrow  { cursor: url(assets/cursors/arrow.png)  2  2, default; }
+body.cur-hand   { cursor: url(assets/cursors/hand.png)   11 2, pointer; }
+body.cur-fwd    { cursor: url(assets/cursors/fwd.png)    15 4, pointer; }
+body.cur-back   { cursor: url(assets/cursors/back.png)   15 26, pointer; }
+body.cur-left   { cursor: url(assets/cursors/left.png)   4 15, pointer; }
+body.cur-right  { cursor: url(assets/cursors/right.png)  27 15, pointer; }
+body.cur-zoom   { cursor: url(assets/cursors/zoom.png)   13 13, zoom-in; }
+body.cur-listen { cursor: url(assets/cursors/listen.png) 15 15, pointer; }
+body.cur-quill  { cursor: url(assets/cursors/quill.png)  3 28, text; }
+body.cur-key    { cursor: url(assets/cursors/key.png)    15 15, pointer; }
+body.cur-lock   { cursor: url(assets/cursors/lock.png)   15 15, pointer; }
+body.cur-watch  { cursor: url(assets/cursors/watch1.png) 15 15, wait; }
+body.cur-watch2 { cursor: url(assets/cursors/watch2.png) 15 15, wait; }
+
+/* touch devices: no cursor art, and never show the desktop arrow ghost */
+@media (pointer: coarse) {
+  body[class*="cur-"] { cursor: none; }
+}
