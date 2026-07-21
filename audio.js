@@ -308,6 +308,11 @@ const SFX = {
   hiss()     { burst(1.1, 0.06, 5200, "highpass"); },
   whisper()  { burst(0.7, 0.05, 1800, "bandpass"); burst(0.5, 0.04, 2600, "bandpass", 0.25); },
   creak()    { tone(300, "sawtooth", 0.4, 0.03, 0, 210); },
+  // a cat's ear twitching: the softest possible flick, with a tiny pitched
+  // flutter after it so it reads as cute rather than as a click
+  earFlick() { burst(0.012, 0.16, 5200, "highpass");
+               tone(2350, "sine", 0.05, 0.045, 0.01, 3100);
+               tone(3100, "sine", 0.04, 0.03, 0.06, 2600); },
   musicbox() { const notes = [1318, 1568, 1760, 2093, 1760, 1568, 1318];
                notes.forEach((f, i) => tone(f, "sine", 0.5, 0.10, i * 0.22)); },
 };

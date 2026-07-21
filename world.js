@@ -72,7 +72,9 @@ function loadImg(name) {
 ["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-lamp-mask","el-bat1","el-bat2",
  "el-eye1","el-eye2","el-eye3","el-eye4","el-eye5","el-eye6",
  "el-hpic2b","el-hpic2c",
- "el-fish1","el-fish2","el-fish3","el-fish4",
+ "el-fishI1","el-fishI2","el-fishI3","el-fishI4","el-fishI5","el-fishI6","el-fishI7","el-fishI8","el-fishI9","el-fishI10","el-fishI11","el-fishI12",
+ "el-fishP1","el-fishP2","el-fishP3","el-fishP4","el-fishP5","el-fishP6","el-fishP7","el-fishP8","el-fishP9","el-fishP10","el-fishP11","el-fishP12","el-fishP13","el-fishP14","el-fishP15","el-fishP16","el-fishP17","el-fishP18","el-fishP19",
+ "el-catI1","el-catI2","el-catI3","el-catI4","el-catI5","el-catI6","el-catI7","el-catI8","el-catC1","el-catC2","el-catC3","el-catC4","el-catC5","el-catC6",
  "el-booth-mask",
  "el-eyeF1","el-eyeF2","el-eyeF3","el-eyeF4","el-eyeF5","el-eyeF6","el-eyeF7","el-eyeF8","el-eyeF9","el-eyeF10","el-eyeF11","el-eyeF12","el-eyeF13","el-eyeF14","el-eyeF15","el-eyeF16","el-eyeF17","el-eyeF18","el-eyeF19","el-eyeF20","el-eyeF21","el-eyeF22","el-eyeF23","el-eyeF24","el-eyeF25","el-eyeF26","el-eyeF27","el-eyeF28","el-eyeF29","el-eyeF30","el-eyeF31","el-eyeF32",
  "el-recI1","el-recI2","el-recI3","el-recI4","el-recI5","el-recI6","el-recI7","el-recI8","el-recI9","el-recI10","el-recI11","el-recI12","el-recS1","el-recS2","el-recS3","el-recS4","el-recS5","el-recS6","el-recS7","el-recS8","el-recS9","el-recS10","el-recS11","el-recS12"].forEach(loadImg);
@@ -330,43 +332,70 @@ function twinkleStars(ctx, t) {
    across with its top edge at y71, so it's a circle of r105 centred here. (A
    cloud band crosses its lower half, which is what fooled an earlier read.) */
 const MOON = { cx: 1281, cy: 176, r: 105 };
-/* The moon sits only ~70px below the top of the card, so there's no headroom to
-   perch him ABOVE it at any readable size — his rod clips straight off the edge.
-   He's inscribed IN the disc instead, which reads as cut-paper silhouette and
-   lets him be big enough to see. Sized so his head grazes the top of the moon
-   and the ripple sits near the bottom; ink spans y78..548 of the 627 frame. */
-/* Dropped so his seat lands on the cloud band that crosses the moon — measured
-   by scanning beside the disc, the cloud runs y205..260, so seat ~215. */
-const FISH = { sz: 276, x: 1143, y: 76 };
-const FISH_X = () => FISH.x;
-const FISH_Y = () => FISH.y;
-const FISH_SEQ = [[2, 300], [3, 320], [4, 900]];         // frame, ms — the catch
-const FISH_MS  = FISH_SEQ.reduce((a, b) => a + b[1], 0);
+/* Two loops that share ONE crop, so the catch cannot jump relative to the sit:
+   idle = 12 frames of him fishing with the ripples spreading; pull = 19 frames
+   of him hauling a star up. Both gifs carry their own per-frame delays (the
+   pull holds on frames 10 and 19), so playback walks a delay table rather than
+   assuming a constant rate — a fixed fps desyncs them from the artwork.
+   Measured on the sprite: head 0.342 down, seat 0.751, ripples 0.891-0.955,
+   ripple centre 0.660 across. Placed so the seat lands on the cloud band that
+   crosses the moon (y205..260) and the ripples still fall inside the disc.
+   y must stay >= 0: the star reaches the very top row of the shared crop. */
+const FISH = { w: 210, x: 1176, y: 2 };
+const FISH_IDLE_D = [100,100,100,100,100,100,100,100,100,100,100,100];
+const FISH_PULL_D = [80,80,80,80,80,80,80,80,80,340,80,80,80,80,80,80,80,80,250];
+const FISH_MS   = FISH_PULL_D.reduce((a, b) => a + b, 0);
 const FISH_FADE = 800;                                    // he dithers into being
+
+/* walk a per-frame delay table; returns a 1-based frame index */
+function frameAt(delays, ms, loop) {
+  const total = delays.reduce((a, b) => a + b, 0);
+  let k = loop ? ms % total : Math.min(ms, total - 1);
+  for (let i = 0; i < delays.length; i++) { if (k < delays[i]) return i + 1; k -= delays[i]; }
+  return delays.length;
+}
 
 function drawFisher(ctx, S, t) {
   const st = S.st;
   if (!st.fishT0) return;
   const e = t - st.fishT0;
-  let frame = 1, alpha = 1;
+  let im, alpha = 1;
   if (st.fishState === 2) {                 // reeling a star up out of the moon
-    let k = e;
-    frame = 4;
-    for (const [f, d] of FISH_SEQ) { if (k < d) { frame = f; break; } k -= d; }
+    im = "el-fishP" + frameAt(FISH_PULL_D, e, false);
     // NB: the return to sitting is driven by a wall clock in moonFish, never from
     // here — a stalled render must not be able to strand him mid-catch
-  } else {                                   // sitting — fading in on arrival
+  } else {                                   // sitting and fishing — fading in on arrival
+    im = "el-fishI" + frameAt(FISH_IDLE_D, e, true);
     alpha = Math.min(1, e / FISH_FADE);
   }
-  const im = "el-fish" + frame;
-  const X = FISH_X(), Y = FISH_Y(), Z = FISH.sz;
+  const H2 = FISH.w * 506 / 368;
   ctx.save();
   ctx.globalAlpha = alpha;                   // partial alpha → the shader dithers him in
-  elemWhite(ctx, im, X, Y, Z, Z);            // white against the night sky
+  elemWhite(ctx, im, FISH.x, FISH.y, FISH.w, H2);   // white against the night sky
   // ...but he'd vanish where he overlaps the bright moon, so re-ink that part
   ctx.beginPath(); ctx.arc(MOON.cx, MOON.cy, MOON.r, 0, 7); ctx.clip();
-  elem(ctx, im, X, Y, Z, Z);
+  elem(ctx, im, FISH.x, FISH.y, FISH.w, H2);
   ctx.restore();
+}
+
+/* ================================ the cat (late-b) ========================
+   Sits on the floorboards off to the right of the 07/07/11 frame, well clear
+   of it (the picture spans x522..1014). Idle is a tail-swish with a blink;
+   clicking flicks an ear. Both loops share one crop so the click can't jump.
+   The sprite fills its crop, so its feet are the bottom edge. */
+const CAT = { w: 200, x: 1150, feet: 1370 };
+const CAT_IDLE_D  = [200,190,190,190,200,90,120,120];
+const CAT_CLICK_D = [120,50,70,80,70,220];
+const CAT_CLICK_MS = CAT_CLICK_D.reduce((a, b) => a + b, 0);
+const CAT_H  = () => CAT.w * 493 / 368;
+const CAT_R  = () => [CAT.x, CAT.feet - CAT_H(), CAT.w, CAT_H()];
+
+function drawCat(ctx, S, t) {
+  const st = S.st, r = CAT_R();
+  const flick = st.catT0 && (t - st.catT0) < CAT_CLICK_MS;
+  const im = flick ? "el-catC" + frameAt(CAT_CLICK_D, t - st.catT0, false)
+                   : "el-catI" + frameAt(CAT_IDLE_D, t, true);
+  elem(ctx, im, r[0], r[1], r[2], r[3]);
 }
 
 /* ================================ the receptionist (hall-1) ================
@@ -385,11 +414,14 @@ const BOOTH = [1248, 575, 154, 260];
    his head at local y0 — so a crop at those edges clips the nose and makes the
    head flicker. Inset from both. At the true width his original size fits AND
    the trunk shows: tip 4px inside the glass, face just past its middle. */
-const REC = { w: 250, cx: 1366, y: 589 };
+/* cx is bounded on the LEFT: the glass pane is only 154 wide and he is 250, so
+   his trunk is the leftmost ink and crosses the window upright below cx 1373.
+   Moving him to 1366 is what cut his nose off. 1374 is as far left as he goes. */
+const REC = { w: 250, cx: 1374, y: 589 };
 const REC_FPS = 11;
 const REC_IN_MS = 950;                       // rising into the window
 const REC_LINES = [
-  "Mhmm yes? Oh, hello! Welcome to the Clay and Kelsy's Retrospective.",
+  "Mhmm yes? Oh, hello! Welcome to Clay and Kelsy's Retrospective.",
   "Please stay as long as you'd like, and sign the guest book in the Rotunda",
   "I seem to have dropped my key to the [Theater] and the [PhotoBooth] room...",
 ];
@@ -772,9 +804,10 @@ const cards = {
     draw(ctx,H,S,t){ roomTitle(ctx,H,"2018 - 2019",91); } },
 
   "late-b": { id:"late-b", img:V+"room-1.png", tone:"ink", room:"late", ambient:"room",
+    live:true,                                    // the cat's tail never stops
     nav:{ left:"late-a", back:"rotunda" }, frames:[{ song:"seven", r:[522,426,492,504], plate:[689,1076,156,48] }],
-    hots: bulbHots([[764,123]]),
-    draw(ctx,H,S,t){ } },
+    hots:[ ...bulbHots([[764,123]]), { r:CAT_R(), cur:"hand", fn:"catFlick" } ],
+    draw(ctx,H,S,t){ drawCat(ctx,S,t); } },
 
   "annex": { id:"annex", img:V+"gallery-b.png", tone:"ink", room:"annex", ambient:"annex",
     nav:{ back:"rotunda" }, frames:[{ song:"hate-me", r:[288,486,270,378], plate:[360,978,134,51] },{ song:"kanye", r:[952,456,347,447], plate:[1059,1009,134,51], shape:"oval" }],
@@ -1097,6 +1130,12 @@ const ACTIONS = {
     }, ()=>{ st.ufoFlying=0; st.starsOut=1; starsBg(true); S.A.dirty=true; H.sfx("musicbox"); });
   },
   /* somebody fishes off the moon. First poke sits him down, the next lands a star. */
+  /* flick an ear — restart the one-shot even if it's already running */
+  catFlick(hot,H,S){ S.st.catT0 = performance.now(); H.sfx("earFlick");
+    setTimeout(()=>{ S.A && (S.A.dirty = true); window.__mus && window.__mus.renderOnce(); },
+               CAT_CLICK_MS + 40);            // wall clock: never strand him mid-flick
+    S.A.dirty = true; },
+
   moonFish(hot,H,S){
     const st = S.st, now = performance.now();
     if (!st.fishT0) {                        // nobody up there yet — he dithers into being
