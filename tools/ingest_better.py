@@ -53,6 +53,20 @@ full("room-2 picture- Square circle.png", "gallery-b")
 full("room-3 pictures - simple.png", "gallery-c")
 full("room-3 - simple 2.png", "gallery-d")
 full("hallway picture frame 1.png", "hframe")
+full("Movie room.png", "movie")
+
+def curtain(src_name, out_name, t=128):
+    """The theatre curtain: threshold, then crop the black margin away so it can be
+       stretched straight into the screen opening."""
+    im = Image.open(os.path.join(SRC, "Individual elements", src_name))
+    b = thresh(im, t)
+    bbox = b.getbbox()                      # bounds of the lit curtain
+    if bbox:
+        b = b.crop(bbox)
+    b.save(os.path.join(OUT, out_name + ".png"))
+    print("curtain →", out_name, b.size)
+
+curtain("reds.png", "el-reds")
 
 # elements
 elem("Key.png", "el-key")

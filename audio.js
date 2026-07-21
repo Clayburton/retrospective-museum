@@ -230,6 +230,28 @@ const SFX = {
                g.gain.exponentialRampToValueAtTime(0.0003, t0 + 1.4);
                o.connect(f); f.connect(g); g.connect(sfxBus); o.start(t0); o.stop(t0 + 1.5);
                for (const w of [0.12, 0.37, 0.55, 0.86, 1.04]) burst(0.014, 0.20, 900, "bandpass", w); },
+  applause() { // an old low-bit house clapping — crunchy, sample-and-held, swelling then thinning
+               const t0 = ctx.currentTime, dur = 3.4, sr = ctx.sampleRate;
+               const n = Math.floor(sr * dur);
+               const b = ctx.createBuffer(1, n, sr), ch = b.getChannelData(0);
+               const step = 6;                       // sample-and-hold = the low-bit crunch
+               const claps = 190;
+               for (let c = 0; c < claps; c++) {
+                 const at = Math.pow(Math.random(), 0.7) * dur * 0.92;
+                 const s0 = Math.floor(at * sr), len = Math.floor((0.018 + Math.random()*0.03) * sr);
+                 const amp = (0.28 + Math.random()*0.5) * Math.sin(Math.PI * Math.min(1, at/dur));
+                 let hold = 0;
+                 for (let i = 0; i < len && s0 + i < n; i++) {
+                   if (i % step === 0) hold = (Math.random()*2 - 1);
+                   ch[s0 + i] += hold * amp * Math.pow(1 - i/len, 2.2);
+                 }
+               }
+               for (let i = 0; i < n; i++) ch[i] = Math.max(-1, Math.min(1, ch[i] * 0.5));
+               const src = ctx.createBufferSource(); src.buffer = b;
+               const f = ctx.createBiquadFilter(); f.type = "bandpass";
+               f.frequency.value = 2100; f.Q.value = 0.7;
+               const g = ctx.createGain(); g.gain.value = 0.5;
+               src.connect(f); f.connect(g); g.connect(sfxBus); src.start(t0); },
   sinkhole() { // the grate: a hollow drop into somewhere deep under the street
                const t0 = ctx.currentTime;
                const o = ctx.createOscillator(); o.type = "sine";

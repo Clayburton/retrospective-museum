@@ -54,6 +54,7 @@ for (const id of ids) {
   edges[id] = [...out];
 }
 // fn-driven gos the static walk can't see — declare them
+edges["hall-1"].push("movie");                   // the janitor's key also opens the theatre door
 edges["hall-2"].push("mirror");                  // the janitor's key opens the 2nd door
 edges["hall-2"].push("hframe");                  // the two hallway pictures zoom in
 edges["y17a"].push("mh-zoom1");                  // the mouse-hole picture

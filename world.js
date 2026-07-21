@@ -66,7 +66,7 @@ function loadImg(name) {
     i.src = V + name + ".png?av=9"; IMG[name] = i; }
   return IMG[name];
 }
-["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2"].forEach(loadImg);
+["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds"].forEach(loadImg);
 
 /* ================================================= a few paper-card procs = */
 function g(v){ return `rgb(${v},${v},${v})`; }
@@ -150,6 +150,37 @@ function starfield(H, S) {
   STAR_CV = c; STAR_FOR = S.cur;
   return c;
 }
+/* ================================================== the movie theatre === */
+const SCREEN_R = [352, 405, 823, 535];        // the screen opening, master coords
+const MOVIE_ID = "shjRvp5i77Y";
+const CURTAIN_MS = 2200;                      // how long the curtain takes to rise
+let MOVIE_IF = null;
+function movieFit() {
+  const st = document.getElementById("stage");
+  if (!MOVIE_IF || !st) return;
+  const r = st.getBoundingClientRect(), sc = r.width / M;
+  MOVIE_IF.style.left   = (r.left + SCREEN_R[0]*sc) + "px";
+  MOVIE_IF.style.top    = (r.top  + SCREEN_R[1]*sc) + "px";
+  MOVIE_IF.style.width  = (SCREEN_R[2]*sc) + "px";
+  MOVIE_IF.style.height = (SCREEN_R[3]*sc) + "px";
+}
+function movieShow(on) {
+  if (!on) { if (MOVIE_IF) { MOVIE_IF.remove(); MOVIE_IF = null; } return; }
+  if (MOVIE_IF) { movieFit(); return; }
+  MOVIE_IF = document.createElement("iframe");
+  MOVIE_IF.id = "movieFrame";
+  MOVIE_IF.setAttribute("frameborder", "0");
+  MOVIE_IF.setAttribute("allowfullscreen", "");
+  MOVIE_IF.allow = "autoplay; encrypted-media; picture-in-picture";
+  MOVIE_IF.style.cssText = "position:absolute;border:0;z-index:5;background:#000;";
+  // the click that raised the curtain is the gesture that lets it play with sound
+  MOVIE_IF.src = "https://www.youtube-nocookie.com/embed/" + MOVIE_ID +
+                 "?autoplay=1&rel=0&modestbranding=1&playsinline=1";
+  document.body.appendChild(MOVIE_IF);
+  movieFit();
+}
+window.addEventListener("resize", movieFit);
+
 /* ceiling-lamp click targets — [x,y] centres of each room's fixtures (master coords) */
 function bulbHots(pts) {
   return pts.map(p => ({ r:[p[0]-66, p[1]-66, 132, 132], cur:"hand", fn:"bulbDip" }));
@@ -218,9 +249,24 @@ const cards = {
       if (st.starsOut) { const sf=starfield(H,S); if (sf) ctx.drawImage(sf,0,0); }
       if (!st.lampOut) {                         // glow at the drawn lamp head (top-right)
         const lx=1035, ly=345;
-        const lg=ctx.createRadialGradient(lx,ly,4,lx,ly,120); lg.addColorStop(0,"rgba(244,240,228,0.9)"); lg.addColorStop(1,"rgba(244,240,228,0)");
-        ctx.fillStyle=lg; ctx.beginPath(); ctx.arc(lx,ly,120,0,7); ctx.fill();
-        const cg=ctx.createLinearGradient(0,345,0,1160); cg.addColorStop(0,"rgba(238,234,222,0.16)"); cg.addColorStop(1,"rgba(238,234,222,0.01)");
+        // hot core → soft halo. Separate stops keep the dither from muddying it into
+        // one flat blob: a small solid centre, a quick falloff, then a wide faint bloom.
+        const core=ctx.createRadialGradient(lx,ly,0,lx,ly,54);
+        core.addColorStop(0,"rgba(255,253,246,1)"); core.addColorStop(0.45,"rgba(250,246,234,0.92)");
+        core.addColorStop(1,"rgba(246,242,230,0)");
+        ctx.fillStyle=core; ctx.beginPath(); ctx.arc(lx,ly,54,0,7); ctx.fill();
+        const halo=ctx.createRadialGradient(lx,ly,40,lx,ly,190);
+        halo.addColorStop(0,"rgba(244,240,228,0.42)"); halo.addColorStop(0.5,"rgba(244,240,228,0.13)");
+        halo.addColorStop(1,"rgba(244,240,228,0)");
+        ctx.fillStyle=halo; ctx.beginPath(); ctx.arc(lx,ly,190,0,7); ctx.fill();
+        // a few thin rays so it reads as a lamp, not a smudge
+        ctx.save(); ctx.translate(lx,ly); ctx.strokeStyle="rgba(248,244,232,0.20)"; ctx.lineWidth=3;
+        for (let i=0;i<8;i++){ const a=i*Math.PI/4;
+          ctx.beginPath(); ctx.moveTo(Math.cos(a)*58,Math.sin(a)*58);
+          ctx.lineTo(Math.cos(a)*(i%2?96:132),Math.sin(a)*(i%2?96:132)); ctx.stroke(); }
+        ctx.restore();
+        // the cone it throws down the road
+        const cg=ctx.createLinearGradient(0,345,0,1160); cg.addColorStop(0,"rgba(238,234,222,0.20)"); cg.addColorStop(1,"rgba(238,234,222,0.01)");
         ctx.fillStyle=cg; ctx.beginPath(); ctx.moveTo(1000,360); ctx.lineTo(760,1160); ctx.lineTo(1200,1160); ctx.closePath(); ctx.fill();
       } else {
         // lamp out — the whole street actually goes dark (the art's lamp is lit, so we cover it)
@@ -259,9 +305,33 @@ const cards = {
     hots:[
       { r:[706,600,150,320], cur:"fwd", go:"hall-2", t:"dissolve", spd:"fast" },
       { r:[1210,830,150,150], cur:"hand", fn:"boothBell", sfx:"bellLow" },
-      { r:[90,420,240,690],  cur:"hand", fn:"rattleDoor" },
+      { r:[90,420,240,690],  cur:"lock", curKey:"key", fn:"movieDoor", onHover:"movieHover" },
     ],
   },
+  /* ---- the movie theatre, behind the padlocked hallway door ---- */
+  "movie": {
+    id:"movie", img:V+"movie.png", tone:"ink", room:"ent", ambient:"hall", depth:4, live:true,
+    nav:{ back:"hall-1" },
+    hots:[ { r:SCREEN_R, cur:"hand", fn:"raiseCurtain" } ],
+    after(H,S){ if (S.st.curtainT0 && performance.now()-S.st.curtainT0 > CURTAIN_MS) movieShow(true); },
+    leave(H,S){ movieShow(false); },
+    draw(ctx,H,S,t){
+      const st=S.st, R=SCREEN_R;
+      const k = st.curtainT0 ? Math.min(1,(t-st.curtainT0)/CURTAIN_MS) : 0;
+      if (k < 1) {                                  // the curtain, rising out of the opening
+        const im = IMG["el-reds"];
+        ctx.save();
+        ctx.beginPath(); ctx.rect(R[0],R[1],R[2],R[3]); ctx.clip();
+        const lift = k*k*(3-2*k) * R[3];            // ease in-out
+        if (im && im.complete && im.naturalWidth) ctx.drawImage(im, R[0], R[1]-lift, R[2], R[3]);
+        else { ctx.fillStyle="rgb(232,228,216)"; ctx.fillRect(R[0],R[1]-lift,R[2],R[3]); }
+        ctx.restore();
+        if (!st.curtainT0)
+          H.type(ctx,"· click the curtain ·", 764, 1010, {cells:3.4,align:"center",alpha:0.7,color:"#f0ece0",plain:true,seed:77});
+      }
+    },
+  },
+
   "hall-2": {
     id:"hall-2", img:V+"hall-2.png", tone:"ink", room:"ent", ambient:"hall", depth:3,
     nav:{ back:"hall-1" },
@@ -451,6 +521,39 @@ const MIRROR_R = [398,380,706,670];   // the ornate frame's black opening (art-m
 
 const ACTIONS = {
   rattleDoor(hot,H){ H.sfx("rattle"); },
+
+  /* the padlocked hallway door → the movie theatre (the janitor's key fits it too) */
+  movieDoor(hot,H,S){
+    if (S.st.movieOpening) return;                  // hover is already unlocking it
+    if (S.st.hasKey){ ACTIONS.movieHover(hot,H,S); }
+    else { H.sfx("rattle"); }                       // locked — the padlock cursor says it all
+  },
+  movieHover(hot,H,S){
+    if (!S.st.hasKey || S.st.movieOpening || S.lock) return;
+    S.st.movieOpening = 1;
+    H.sfx("keys"); setTimeout(()=>H.sfx("creakDoor"), 320);
+    H.anim("hall-1", 720, (ctx,k)=>{                // the key turning in the padlock
+      const cx=210, cy=760;
+      ctx.save(); ctx.translate(cx,cy); ctx.rotate(-0.55 + k*1.5);
+      ctx.strokeStyle="rgb(236,232,218)"; ctx.lineWidth=11; ctx.lineCap="round";
+      ctx.beginPath(); ctx.arc(0,-46,27,0,7); ctx.stroke();                 // bow
+      ctx.beginPath(); ctx.moveTo(0,-19); ctx.lineTo(0,84); ctx.stroke();   // shaft
+      ctx.beginPath(); ctx.moveTo(0,58); ctx.lineTo(24,58);
+      ctx.moveTo(0,74); ctx.lineTo(17,74); ctx.stroke();                    // bit
+      ctx.restore();
+    });
+    // open on a timer so a throttled tab can't strand it half-unlocked
+    setTimeout(()=>{ S.st.movieOpening = 0; if (S.cur === "hall-1") H.go("movie",{ t:"barnOpen", spd:"slow" }); }, 720);
+  },
+
+  /* the curtain goes up and the house applauds */
+  raiseCurtain(hot,H,S){
+    if (S.st.curtainT0) return;                     // already up (or going)
+    S.st.curtainT0 = performance.now();
+    H.sfx("applause");
+    setTimeout(()=>{ if (S.cur === "movie") movieShow(true); }, CURTAIN_MS + 140);
+    S.A.dirty = true;
+  },
   boothBell(hot,H){ /* bellLow via sfx on the hotspot */ },
 
   grassMouse(hot,H,S){                 // something startles in the grass and scurries off
