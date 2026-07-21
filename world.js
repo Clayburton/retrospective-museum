@@ -70,7 +70,8 @@ function loadImg(name) {
   return IMG[name];
 }
 ["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-lamp-mask","el-bat1","el-bat2",
- "el-eye1","el-eye2","el-eye3","el-eye4","el-eye5","el-eye6"].forEach(loadImg);
+ "el-eye1","el-eye2","el-eye3","el-eye4","el-eye5","el-eye6",
+ "el-hpic2b","el-hpic2c"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
 const SAVE_K = "retro.state";
@@ -224,6 +225,9 @@ function filmStop() {
 
 /* the hallway picture frame's real opening in the art (detected, not guessed) */
 const HFRAME_R = [343, 332, 853, 870];
+
+/* the right-hand picture is really three: poke it and it dissolves to the next */
+const HPIC2_SEQ = ["el-hpic2", "el-hpic2b", "el-hpic2c"];
 
 /* The playable-Manhole-in-the-frame experiment is removed for now — see the
    note in CLAUDE.md. The right picture is simply a picture again. */
@@ -428,7 +432,9 @@ const cards = {
   },
   /* ---- the movie theatre, behind the padlocked hallway door ---- */
   "movie": {
-    id:"movie", img:V+"movie.png", tone:"ink", room:"ent", ambient:"hall", depth:4, live:true,
+    // soundproof: whatever song is playing elsewhere goes silent in here, but is
+    // never stopped — it's still running in the room you left it in
+    id:"movie", img:V+"movie.png", tone:"ink", room:"ent", ambient:"hall", depth:4, live:true, soundproof:true,
     nav:{ back:"hall-1" },
     hots:[ { r:SCREEN_R, cur:"hand", fn:"raiseCurtain" },
            ...bulbHots([[132,630],[1404,630]]) ],          // the wall sconces
@@ -591,7 +597,7 @@ const cards = {
       if (n === 1) {
         elemCover(ctx, "el-eye" + eyeFrame(S,t), R[0], R[1], R[2], R[3]);     // the eye that blinks
       } else {
-        elemCover(ctx, "el-hpic2", R[0], R[1], R[2], R[3]);
+        elemCover(ctx, HPIC2_SEQ[(S.st.hpic2 || 0) % HPIC2_SEQ.length], R[0], R[1], R[2], R[3]);
       }
     },
   },
@@ -872,7 +878,14 @@ const ACTIONS = {
 
   /* whichever picture you're stood in front of, poking it does its own thing */
   framePoke(hot,H,S){
-    if ((S.st.hframePic || 1) === 2) { H.sfx("knock"); return; }   // just a picture, for now
+    if ((S.st.hframePic || 1) === 2) {
+      // step to the next picture in the frame, on the engine's own dither dissolve
+      if (S.lock) return;
+      S.st.hpic2 = ((S.st.hpic2 || 0) + 1) % HPIC2_SEQ.length;
+      H.sfx("clack");
+      H.go("hframe", { t:"dissolve", spd:"slow" });
+      return;
+    }
     ACTIONS.blinkEye(hot,H,S);
   },
 

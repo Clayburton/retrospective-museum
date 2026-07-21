@@ -20,7 +20,7 @@ let unlocked = false;
 
 const songEls = {};        // id -> {el, node}
 let current = null;        // {id, room}
-let curRoom = "ent", curDepth = 1;
+let curRoom = "ent", curDepth = 1, curQuiet = false;
 
 function ensureCtx() {
   if (ctx) return true;
@@ -79,6 +79,11 @@ function applyDistance(hard) {
   const gains = [1, 0.5, 0.36, 0.26, 0.18, 0.12, 0.08, 0.05];
   const lpfs = [19000, 2200, 1500, 1000, 700, 480, 330, 230];
   const t = ctx.currentTime, T = hard ? 0.05 : 0.9;
+  if (curQuiet) {                       // a soundproof room (the theatre): the song is
+    songBus.gain.cancelScheduledValues(t);   // silenced but NEVER stopped — it plays on
+    songBus.gain.setTargetAtTime(0, t, 0.18);// in the room you left it in
+    return;
+  }
   songBus.gain.cancelScheduledValues(t);
   songBus.gain.setTargetAtTime(gains[d], t, T / 3);
   songLpf.frequency.cancelScheduledValues(t);
@@ -295,7 +300,7 @@ window.AUDIO = {
     if (curAmbient) ambient(curAmbient);
   },
   play, stop,
-  setRoom(r, depth) { curRoom = r; curDepth = depth == null ? 1 : depth; applyDistance(false); },
+  setRoom(r, depth, quiet) { curRoom = r; curDepth = depth == null ? 1 : depth; curQuiet = !!quiet; applyDistance(false); },
   ambient,
   sfx(n) { if (!ctx || !unlocked) return; try { SFX[n] && SFX[n](); } catch (e) {} },
   analyser() {

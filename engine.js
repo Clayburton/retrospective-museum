@@ -625,7 +625,7 @@ function finishTrans() {
   S.cur = T.target;
   S.lock = false;
   const card = S.A.card;
-  AUDIO.setRoom(card.room || "ent", card.depth);
+  AUDIO.setRoom(card.room || "ent", card.depth, card.soundproof);
   AUDIO.ambient(card.ambient || null);
   broadcastTone(card.tone || "ink");
   card.after && card.after(H, S);
@@ -884,7 +884,7 @@ function boot() {
     document.body.classList.add("ready");
     LD && LD.engineReady();                       // the first card has painted — the loader may lift
     broadcastTone(card.tone || "ink");
-    AUDIO.setRoom(card.room || "ent", card.depth);
+    AUDIO.setRoom(card.room || "ent", card.depth, card.soundproof);
     prefetchNeighbors(card);
     card.after && card.after(H, S);
     updateCursor(innerWidth / 2, innerHeight / 2);
