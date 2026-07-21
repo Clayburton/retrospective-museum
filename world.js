@@ -66,7 +66,23 @@ function loadImg(name) {
     i.src = V + name + ".png?av=9"; IMG[name] = i; }
   return IMG[name];
 }
-["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds"].forEach(loadImg);
+["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask"].forEach(loadImg);
+
+/* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
+const SAVE_K = "retro.state";
+function saveSt(S){
+  try { localStorage.setItem(SAVE_K, JSON.stringify({
+    hasKey: S.st.hasKey ? 1 : 0, keyShown: S.st.keyShown ? 1 : 0, camWanted: S.st.camWanted ? 1 : 0 })); }
+  catch(e){}
+}
+function loadSt(S){
+  try {
+    const o = JSON.parse(localStorage.getItem(SAVE_K) || "{}");
+    if (o.hasKey)    S.st.hasKey = 1;
+    if (o.keyShown)  S.st.keyShown = 1;
+    if (o.camWanted) S.st.camWanted = 1;
+  } catch(e){}
+}
 
 /* ================================================= a few paper-card procs = */
 function g(v){ return `rgb(${v},${v},${v})`; }
@@ -180,6 +196,16 @@ function movieShow(on) {
   movieFit();
 }
 window.addEventListener("resize", movieFit);
+
+/* offscreen the mirror reflection is composited in, so it can be masked to the glass */
+let MIRROR_CV = null;
+function mirrorCv() {
+  if (!MIRROR_CV) {
+    MIRROR_CV = document.createElement("canvas");
+    MIRROR_CV.width = MIRROR_R[2]; MIRROR_CV.height = MIRROR_R[3];
+  }
+  return MIRROR_CV;
+}
 
 /* ceiling-lamp click targets — [x,y] centres of each room's fixtures (master coords) */
 function bulbHots(pts) {
@@ -452,23 +478,36 @@ const cards = {
       { r:[980,660,310,470], cur:"hand", fn:"snapPhoto" },
       { r:[1210,1270,310,200], cur:"zoom", go:"photobook", t:"zoomOpen", spd:"fast", at:[1360,1330] },
     ],
+    after(H,S){ if (S.st.camWanted && !CAM.on) ACTIONS.mirrorToggle({},H,S); },   // stays on across visits
     leave(H,S){ ACTIONS.camOff(); },
     draw(ctx,H,S,t){
       // the mirror glass fills the big ornate black frame opening (MIRROR_R)
       const R=MIRROR_R, mcx=R[0]+R[2]/2, mcy=R[1]+R[3]/2;
-      ctx.save();
-      ctx.beginPath(); ctx.rect(R[0],R[1],R[2],R[3]); ctx.clip();
       if (CAM.on && CAM.video && CAM.video.videoWidth){
+        // Render the reflection offscreen, then punch it through the glass mask so the
+        // drawn slide camera (which overlaps the glass) keeps standing in FRONT of it.
+        const cv = mirrorCv(), g = cv.getContext("2d");
+        g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,R[2],R[3]);
         const vw=CAM.video.videoWidth, vh=CAM.video.videoHeight, s=Math.max(R[2]/vw,R[3]/vh)*1.02;
-        ctx.translate(mcx,mcy); ctx.scale(-1,1);
-        try{ ctx.filter="grayscale(1) contrast(1.2)"; }catch(e){}
-        ctx.drawImage(CAM.video, -vw*s/2, -vh*s/2, vw*s, vh*s);
-        try{ ctx.filter="none"; }catch(e){}
+        g.save();
+        g.translate(R[2]/2,R[3]/2); g.scale(-1,1);
+        try{ g.filter="grayscale(1) contrast(1.2)"; }catch(e){}
+        g.drawImage(CAM.video, -vw*s/2, -vh*s/2, vw*s, vh*s);
+        g.restore();
+        const mk = IMG["el-mirror-mask"];
+        if (mk && mk.complete && mk.naturalWidth){
+          g.globalCompositeOperation="destination-in";
+          g.drawImage(mk, -R[0], -R[1], M, M);       // mask is full-frame in master coords
+          g.globalCompositeOperation="source-over";
+        }
+        ctx.drawImage(cv, R[0], R[1]);
       } else {
+        ctx.save();
+        ctx.beginPath(); ctx.rect(R[0],R[1],R[2],R[3]); ctx.clip();
         H.type(ctx, CAM.err?"the glass shows nothing":"a dark mirror", mcx, mcy-10, {cells:6,align:"center",alpha:0.7,color:"#e8e4d8",plain:true});
         if(!CAM.err) H.type(ctx,"· click to look ·", mcx, mcy+60, {cells:4,align:"center",alpha:0.5,color:"#e8e4d8",plain:true});
+        ctx.restore();
       }
-      ctx.restore();
       if (PHOTOS.length>=6) H.type(ctx,"out of film", 1130, 620, {cells:3.5,align:"center",alpha:0.6,color:"#c9c4b4",plain:true});
     },
   },
@@ -638,14 +677,14 @@ const ACTIONS = {
   mouseSqueak(hot,H,S){
     H.sfx("squeak");
     if (S.st.keyShown || S.st.hasKey) return;
-    S.st.keyShown = 1;
+    S.st.keyShown = 1; saveSt(S);
     setTimeout(()=>H.sfx("keys"), 240);
     S.A.dirty=true;
   },
   takeKey(hot,H,S){
     if (!S.st.keyShown){ H.sfx("tickSoft"); return; }    // nothing there until the mouse moves
     if (S.st.hasKey){ H.sfx("tickSoft"); return; }
-    S.st.hasKey=1; H.sfx("keys"); setTimeout(()=>H.sfx("squeak"),200);
+    S.st.hasKey=1; saveSt(S); H.sfx("keys"); setTimeout(()=>H.sfx("squeak"),200);
     H.anim("mousehole", 900, (ctx,k)=>{ ctx.save(); ctx.globalAlpha=1-k; ctx.translate(830,1035-k*160); ctx.rotate(k*0.6);
       const s=1+k*1.4; elem(ctx,"el-key",-140*s,-90*s,280*s,180*s); ctx.restore(); });
     S.A.dirty=true;
@@ -679,12 +718,13 @@ const ACTIONS = {
 
   /* mirror + camera + photobook (dithered webcam) */
   async mirrorToggle(hot,H,S){
-    if (CAM.on){ ACTIONS.camOff(); S.A.dirty=true; return; }
+    if (CAM.on){ ACTIONS.camOff(); S.st.camWanted=0; saveSt(S); S.A.dirty=true; return; }
     if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){ CAM.err=true; H.sfx("brokenNote"); S.A.dirty=true; return; }
     try{
       CAM.stream = await navigator.mediaDevices.getUserMedia({ video:{ width:640 }, audio:false });
       CAM.video = document.createElement("video"); CAM.video.srcObject=CAM.stream; CAM.video.muted=true; CAM.video.playsInline=true;
       await CAM.video.play(); CAM.on=true; CAM.err=false; cards["mirror"].live=true; H.sfx("tick");
+      S.st.camWanted=1; saveSt(S);            // remember it, so it comes back on every visit
       window.__mus && window.__mus.wake();   // start the live loop so the webcam updates every frame
     }catch(e){ CAM.err=true; H.sfx("brokenNote"); }
     S.A.dirty=true; window.__mus && window.__mus.renderOnce();
@@ -751,6 +791,7 @@ const GB = {
 
 /* ============================================================= ASSEMBLY == */
 function build(H){
+  if (H && H.S) loadSt(H.S);                    // the key (and the mirror cam) survive a reload
   for (const id in songs){
     const song=songs[id];
     const wallId=Object.keys(cards).find(cid=>(cards[cid].frames||[]).some(f=>f.song===id));
