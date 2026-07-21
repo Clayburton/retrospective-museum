@@ -103,6 +103,10 @@ function elem(ctx, name, x, y, w, h) {          // draw a transparent art elemen
 function elemInvert(ctx, name, x, y, w, h) {    // draw a WHITE element (el-straysky is already white)
   elem(ctx, name, x, y, w, h);
 }
+/* ceiling-lamp click targets — [x,y] centres of each room's fixtures (master coords) */
+function bulbHots(pts) {
+  return pts.map(p => ({ r:[p[0]-66, p[1]-66, 132, 132], cur:"hand", fn:"bulbDip" }));
+}
 function starsBg(on) {                          // fill the WHOLE window (letterbox bars too) with stars
   document.body.style.backgroundImage = on ? `url(${V}el-straysky.png?av=9)` : "";
   document.body.style.backgroundSize = "cover";
@@ -236,29 +240,35 @@ const cards = {
   /* ---- galleries ---- (mouse hole lives in y17a) */
   "early":  { id:"early",  img:V+"gallery-a.png", tone:"ink", room:"early", ambient:"room",
     nav:{ back:"rotunda" }, frames:[{ song:"laputa", r:[318,486,264,354], plate:[395,966,118,41] },{ song:"intro", r:[978,486,252,354], plate:[1042,966,117,41] }],
+    hots: bulbHots([[446,155],[1103,155]]),
     draw(ctx,H,S,t){ roomTitle(ctx,H,"EARLY WORKS",61); } },
 
   "y17a": { id:"y17a", img:V+"gallery-mh.png", tone:"ink", room:"y17", ambient:"room",
     nav:{ right:"y17b", back:"rotunda" }, frames:[{ song:"no-good-reason", r:[402,564,246,276], plate:[485,966,82,30] },{ song:"currently-alone", r:[954,564,228,276], plate:[1026,966,83,30] }],
-    hots:[ { r:[1280,1120,120,110], cur:"zoom", go:"mh-zoom1", t:"zoomOpen", spd:"fast", at:[1340,1170] } ],
+    hots:[ { r:[1280,1120,120,110], cur:"zoom", go:"mh-zoom1", t:"zoomOpen", spd:"fast", at:[1340,1170] },
+           ...bulbHots([[355,90],[1180,90]]) ],
     draw(ctx,H,S,t){ roomTitle(ctx,H,"2017",71); } },
 
   "y17b": { id:"y17b", img:V+"gallery-c.png", tone:"ink", room:"y17", ambient:"room",
     nav:{ left:"y17a", back:"rotunda" },
     frames:[{ song:"casino", r:[252,576,168,240], plate:[312,940,72,22] },{ song:"wondering", r:[630,534,270,294], plate:[728,950,71,23] },{ song:"i-can-do-it-all", r:[1104,576,174,240], plate:[1174,940,73,22] }],
+    hots: bulbHots([[315,111],[1218,111]]),
     draw(ctx,H,S,t){ } },
 
   "late-a": { id:"late-a", img:V+"gallery-d.png", tone:"ink", room:"late", ambient:"room",
     nav:{ right:"late-b", back:"rotunda" },
     frames:[{ song:"heartbeats", r:[228,624,180,258], plate:[280,1005,83,30] },{ song:"i-cant-forget", r:[642,558,246,330], plate:[727,1011,82,29] },{ song:"bea5", r:[1122,624,180,270], plate:[1174,1005,85,30] }],
+    hots: bulbHots([[286,128],[1235,128]]),
     draw(ctx,H,S,t){ roomTitle(ctx,H,"2018 - 2019",91); } },
 
   "late-b": { id:"late-b", img:V+"room-1.png", tone:"ink", room:"late", ambient:"room",
     nav:{ left:"late-a", back:"rotunda" }, frames:[{ song:"seven", r:[522,426,492,504], plate:[689,1076,156,48] }],
+    hots: bulbHots([[764,123]]),
     draw(ctx,H,S,t){ } },
 
   "annex": { id:"annex", img:V+"gallery-b.png", tone:"ink", room:"annex", ambient:"annex",
     nav:{ back:"rotunda" }, frames:[{ song:"hate-me", r:[288,486,270,378], plate:[360,978,134,51] },{ song:"kanye", r:[952,456,347,447], plate:[1059,1009,134,51], shape:"oval" }],
+    hots: bulbHots([[418,124],[1125,124]]),
     draw(ctx,H,S,t){
       roomTitle(ctx,H,"REMIXES",111);
       H.type(ctx,"please remember to love the misunderstood.", 768, 1420, {cells:4,align:"center",alpha:0.6,color:"#c9c4b4",plain:true,seed:113}); } },
@@ -380,26 +390,25 @@ const ACTIONS = {
   rattleDoor(hot,H){ H.sfx("rattle"); },
   boothBell(hot,H){ /* bellLow via sfx on the hotspot */ },
 
-  grassMouse(hot,H,S){                 // a little mouse peeks out of the grass, then scurries off
-    H.sfx("rustle"); setTimeout(()=>H.sfx("squeak"),280); const r=hot.r;
+  grassMouse(hot,H,S){                 // something startles in the grass and scurries off
+    H.sfx("rustle"); setTimeout(()=>H.sfx("squeak"),120); const r=hot.r;
     const bx=r[0]+r[2]*0.5, by=r[1]+r[3]-70;
-    H.anim("facade", 1600, (ctx,k)=>{
+    H.anim("facade", 760, (ctx,k)=>{   // scurry off to the left — no peek, it's already running
       ctx.fillStyle="rgb(24,24,22)";
-      if(k<0.6){                        // pop up and look
-        const up=Math.min(1,k*3)*72, cx=bx, cy=by-up;
-        ctx.beginPath(); ctx.ellipse(cx,cy+18,30,26,0,0,7); ctx.fill();       // body
-        ctx.beginPath(); ctx.arc(cx,cy-8,20,0,7); ctx.fill();                 // head
-        ctx.beginPath(); ctx.arc(cx-16,cy-24,11,0,7); ctx.fill();             // ears
-        ctx.beginPath(); ctx.arc(cx+16,cy-24,11,0,7); ctx.fill();
-        ctx.fillStyle="rgb(240,236,224)"; ctx.beginPath(); ctx.arc(cx+8,cy-10,3.5,0,7); ctx.fill(); // eye
-      } else {                          // scurry off to the left
-        const run=(k-0.6)/0.4, x=bx-run*540, y=by-6+Math.sin(run*34)*3;
-        ctx.beginPath(); ctx.ellipse(x,y+18,30,15,0.05,0,7); ctx.fill();      // body
-        ctx.beginPath(); ctx.arc(x-20,y+8,15,0,7); ctx.fill();                // head leading left
-        ctx.strokeStyle="rgb(24,24,22)"; ctx.lineWidth=5; ctx.lineCap="round";
-        ctx.beginPath(); ctx.moveTo(x+28,y+20); ctx.quadraticCurveTo(x+56,y+8,x+74,y+24); ctx.stroke(); // tail
-      }
+      const x=bx-k*540, y=by-6+Math.sin(k*34)*3;
+      ctx.beginPath(); ctx.ellipse(x,y+18,30,15,0.05,0,7); ctx.fill();        // body
+      ctx.beginPath(); ctx.arc(x-20,y+8,15,0,7); ctx.fill();                  // head leading left
+      ctx.strokeStyle="rgb(24,24,22)"; ctx.lineWidth=5; ctx.lineCap="round";
+      ctx.beginPath(); ctx.moveTo(x+28,y+20); ctx.quadraticCurveTo(x+56,y+8,x+74,y+24); ctx.stroke(); // tail
     });
+  },
+
+  /* click a room's ceiling lamp → the lights dip (the same flicker the rooms do on their own) */
+  bulbDip(hot,H,S){
+    if (S.flickAnim){ H.sfx("tickSoft"); return; }      // already dipping
+    H.sfx("buzz");
+    S.flickAnim = { t0: performance.now(), dur: 1500, amt: 0.42 };
+    S.lastInput = performance.now();                     // don't let the idle flicker pile on
   },
 
   /* street */

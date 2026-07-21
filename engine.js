@@ -795,6 +795,10 @@ setInterval(() => {
   // second watchdog layer: never leave a finished transition (or its lock) hanging
   if (S.trans && S.trans.frozen == null &&
       performance.now() - S.trans.t0 > S.trans.dur + 400) render();
+  // never leave the lights stuck dim: if a dip outran its duration (throttled rAF), finish it
+  if (S.flickAnim && performance.now() - S.flickAnim.t0 > S.flickAnim.dur + 400) {
+    S.flick = 1; S.flickAnim = null; S.A && (S.A.dirty = true); render();
+  }
   const idle = (performance.now() - S.lastInput) / 1000;
   const card = S.A && S.A.card;
   if (!card) return;
