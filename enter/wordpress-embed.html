@@ -2,17 +2,31 @@
      the [retrospective] museum — entrance banner
      Paste this WHOLE block into a WordPress "Custom HTML" block,
      anywhere you want the door to appear (music page, home page).
+     Replaces any previous version of this block.
 
-     • Full-bleed width, and taller than the "experience i am" strip.
-     • Clicking anywhere in it walks the visitor into the museum —
-       it navigates THIS page, so set MUSEUM_URL in app.js to the
-       WordPress page where the museum itself is embedded.
+     • Full-bleed width. On a phone the block is exactly as TALL as
+       it is WIDE, so the 1:1 art fills it with no ink padding above
+       or below. On desktop it's a taller strip and the square sits
+       centred in it.
+     • Clicking the building or the [ enter the museum ] plate walks
+       the visitor in — it navigates THIS page, so set MUSEUM_URL in
+       app.js to the WordPress page the museum is embedded on.
      • Two things reward a poke instead of entering: knock on the
        building's sign, and startle whatever lives in the grass.
      ============================================================ -->
+<style>
+  #retro-enter { height: clamp(560px, 82vh, 860px); }
+  @media (max-width: 820px) {
+    /* the art is a square of min(width,height) — matching the block's height to
+       its width means the square fills it exactly, with nothing left over to
+       show as bands top and bottom */
+    #retro-enter { height: min(100vw, 100vh) !important; }
+    #retro-enter { height: min(100vw, 100svh) !important; }
+  }
+</style>
 <div id="retro-enter"
      style="position:relative;width:100vw;left:50%;right:50%;margin-left:-50vw;margin-right:-50vw;
-            height:clamp(560px,82vh,860px);background:#101010;overflow:hidden;">
+            background:#101010;overflow:hidden;">
   <iframe
     src="https://clayburton.github.io/retrospective-museum/enter/"
     title="the [retrospective] museum — clay and kelsy"
