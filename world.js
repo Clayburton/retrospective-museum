@@ -66,7 +66,7 @@ function loadImg(name) {
     i.src = V + name + ".png?av=9"; IMG[name] = i; }
   return IMG[name];
 }
-["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask"].forEach(loadImg);
+["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
 const SAVE_K = "retro.state";
@@ -168,34 +168,39 @@ function starfield(H, S) {
 }
 /* ================================================== the movie theatre === */
 const SCREEN_R = [352, 405, 823, 535];        // the screen opening, master coords
-const MOVIE_ID = "shjRvp5i77Y";
+const MOVIE_SRC = "assets/video/movie.mp4";
 const CURTAIN_MS = 2200;                      // how long the curtain takes to rise
-let MOVIE_IF = null;
-function movieFit() {
-  const st = document.getElementById("stage");
-  if (!MOVIE_IF || !st) return;
-  const r = st.getBoundingClientRect(), sc = r.width / M;
-  MOVIE_IF.style.left   = (r.left + SCREEN_R[0]*sc) + "px";
-  MOVIE_IF.style.top    = (r.top  + SCREEN_R[1]*sc) + "px";
-  MOVIE_IF.style.width  = (SCREEN_R[2]*sc) + "px";
-  MOVIE_IF.style.height = (SCREEN_R[3]*sc) + "px";
+
+/* The film plays as a real <video> drawn onto the dynamic canvas, so the engine's
+   1-bit dither runs over it exactly like the mirror's webcam. (A YouTube iframe
+   can never be dithered — it's cross-origin, so its pixels are unreadable, and it
+   would float above the WebGL canvas with its own chrome.) */
+const FILM = { video:null, on:false, err:false };
+let MOVIE_CV = null;
+function movieCv() {
+  if (!MOVIE_CV) {
+    MOVIE_CV = document.createElement("canvas");
+    MOVIE_CV.width = SCREEN_R[2]; MOVIE_CV.height = SCREEN_R[3];
+  }
+  return MOVIE_CV;
 }
-function movieShow(on) {
-  if (!on) { if (MOVIE_IF) { MOVIE_IF.remove(); MOVIE_IF = null; } return; }
-  if (MOVIE_IF) { movieFit(); return; }
-  MOVIE_IF = document.createElement("iframe");
-  MOVIE_IF.id = "movieFrame";
-  MOVIE_IF.setAttribute("frameborder", "0");
-  MOVIE_IF.setAttribute("allowfullscreen", "");
-  MOVIE_IF.allow = "autoplay; encrypted-media; picture-in-picture";
-  MOVIE_IF.style.cssText = "position:absolute;border:0;z-index:5;background:#000;";
-  // the click that raised the curtain is the gesture that lets it play with sound
-  MOVIE_IF.src = "https://www.youtube-nocookie.com/embed/" + MOVIE_ID +
-                 "?autoplay=1&rel=0&modestbranding=1&playsinline=1";
-  document.body.appendChild(MOVIE_IF);
-  movieFit();
+function filmPlay() {
+  if (FILM.video) { FILM.video.play().catch(()=>{}); return; }
+  const v = document.createElement("video");
+  v.src = MOVIE_SRC; v.playsInline = true; v.preload = "auto";
+  v.addEventListener("playing", () => {
+    FILM.on = true; FILM.err = false;
+    cards["movie"].live = true;
+    window.__mus && window.__mus.wake();       // drive the render loop so frames update
+  });
+  v.addEventListener("error", () => { FILM.err = true; window.__mus && window.__mus.renderOnce(); });
+  FILM.video = v;
+  v.play().catch(()=>{ /* needs the gesture; the curtain click supplies it */ });
 }
-window.addEventListener("resize", movieFit);
+function filmStop() {
+  if (FILM.video) FILM.video.pause();
+  FILM.on = false;
+}
 
 /* offscreen the mirror reflection is composited in, so it can be masked to the glass */
 let MIRROR_CV = null;
@@ -338,13 +343,39 @@ const cards = {
   "movie": {
     id:"movie", img:V+"movie.png", tone:"ink", room:"ent", ambient:"hall", depth:4, live:true,
     nav:{ back:"hall-1" },
-    hots:[ { r:SCREEN_R, cur:"hand", fn:"raiseCurtain" } ],
-    after(H,S){ if (S.st.curtainT0 && performance.now()-S.st.curtainT0 > CURTAIN_MS) movieShow(true); },
-    leave(H,S){ movieShow(false); },
+    hots:[ { r:SCREEN_R, cur:"hand", fn:"raiseCurtain" },
+           ...bulbHots([[132,630],[1404,630]]) ],          // the wall sconces
+    after(H,S){ if (S.st.curtainT0 && performance.now()-S.st.curtainT0 > CURTAIN_MS) filmPlay(); },
+    leave(H,S){ filmStop(); },
     draw(ctx,H,S,t){
       const st=S.st, R=SCREEN_R;
       const k = st.curtainT0 ? Math.min(1,(t-st.curtainT0)/CURTAIN_MS) : 0;
-      if (k < 1) {                                  // the curtain, rising out of the opening
+
+      // 1. the film, drawn INTO the screen and masked to its opening, so the
+      //    proscenium keeps its ornament and the engine dithers the picture
+      if (FILM.on && FILM.video && FILM.video.videoWidth) {
+        const cv = movieCv(), g = cv.getContext("2d");
+        g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,R[2],R[3]);
+        const vw=FILM.video.videoWidth, vh=FILM.video.videoHeight;
+        const s=Math.min(R[2]/vw, R[3]/vh);                // contain — never crop the frame
+        try{ g.filter="grayscale(1) contrast(1.15)"; }catch(e){}
+        g.fillStyle="#000"; g.fillRect(0,0,R[2],R[3]);     // letterbox in black
+        g.drawImage(FILM.video, (R[2]-vw*s)/2, (R[3]-vh*s)/2, vw*s, vh*s);
+        try{ g.filter="none"; }catch(e){}
+        const mk = IMG["el-movie-mask"];
+        if (mk && mk.complete && mk.naturalWidth){
+          g.globalCompositeOperation="destination-in";
+          g.drawImage(mk, -R[0], -R[1], M, M);
+          g.globalCompositeOperation="source-over";
+        }
+        ctx.drawImage(cv, R[0], R[1]);
+      } else if (st.curtainT0 && k >= 1) {
+        H.type(ctx, FILM.err ? "the reel is missing" : "threading the projector…",
+               764, 672, {cells:4,align:"center",alpha:0.65,color:"#e8e4d8",plain:true,seed:78});
+      }
+
+      // 2. the curtain over the top of it, rising out of the opening
+      if (k < 1) {
         const im = IMG["el-reds"];
         ctx.save();
         ctx.beginPath(); ctx.rect(R[0],R[1],R[2],R[3]); ctx.clip();
@@ -590,7 +621,11 @@ const ACTIONS = {
     if (S.st.curtainT0) return;                     // already up (or going)
     S.st.curtainT0 = performance.now();
     H.sfx("applause");
-    setTimeout(()=>{ if (S.cur === "movie") movieShow(true); }, CURTAIN_MS + 140);
+    // the house lights go down as the curtain goes up
+    if (!S.flickAnim){ S.flickAnim = { t0: performance.now()+260, dur: 1700, amt: 0.5 }; S.lastInput = performance.now(); }
+    // this click is the gesture that lets the film play with sound
+    filmPlay(); if (FILM.video) FILM.video.pause();
+    setTimeout(()=>{ if (S.cur === "movie") filmPlay(); }, CURTAIN_MS + 120);
     S.A.dirty = true;
   },
   boothBell(hot,H){ /* bellLow via sfx on the hotspot */ },
