@@ -1,0 +1,33 @@
+/* the [retrospective] museum — entrance banner.
+   No position:fixed anywhere (every piece ships inside a WP iframe). */
+
+html, body {
+  margin: 0; padding: 0; width: 100%; height: 100%;
+  background: #101010;
+  overflow: hidden;
+  overscroll-behavior: none;
+}
+
+#shell { position: absolute; inset: 0; }
+
+#stage {
+  position: absolute; left: 0; top: 0;
+  display: block;
+  image-rendering: pixelated;          /* fixed backing, crisp scale — detail never changes */
+  image-rendering: crisp-edges;
+  -webkit-user-select: none; user-select: none;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+}
+
+/* the low-bit cursors from the museum itself */
+body.cur-fwd  { cursor: url(assets/fwd.png)  15 4,  pointer; }
+body.cur-hand { cursor: url(assets/hand.png) 11 2,  pointer; }
+@media (pointer: coarse) { body[class*="cur-"] { cursor: auto; } }
+
+.fallback {
+  position: absolute; inset: 0;
+  display: flex; align-items: center; justify-content: center;
+  color: #f2efe7; background: #101010;
+  font: 700 15px/1.4 "Courier Prime", monospace; letter-spacing: .1em;
+}

@@ -74,22 +74,19 @@ function loadImg(name) {
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
 const SAVE_K = "retro.state";
-/* Only what should outlive a visit is stored: the key you've EARNED (so the
-   doors stay unlocked) and whether the mirror cam was on. The mouse-and-key
-   scene itself is session-only — `keyShown`/`keyTaken` reset on every load, so
-   poking the mouse always uncovers the key again. */
+/* The whole key hunt is session-only: the doors RE-LOCK on every load and the
+   key is back in the hole, because finding it is quick and worth doing again.
+   The only thing that outlives a visit is whether the mirror cam was on. */
 function saveSt(S){
-  try { localStorage.setItem(SAVE_K, JSON.stringify({
-    hasKey: S.st.hasKey ? 1 : 0, camWanted: S.st.camWanted ? 1 : 0 })); }
+  try { localStorage.setItem(SAVE_K, JSON.stringify({ camWanted: S.st.camWanted ? 1 : 0 })); }
   catch(e){}
 }
 function loadSt(S){
   try {
     const o = JSON.parse(localStorage.getItem(SAVE_K) || "{}");
-    if (o.hasKey)    S.st.hasKey = 1;
     if (o.camWanted) S.st.camWanted = 1;
   } catch(e){}
-  S.st.keyShown = 0; S.st.keyTaken = 0;         // the hole is always worth searching again
+  S.st.hasKey = 0; S.st.keyShown = 0; S.st.keyTaken = 0;
 }
 
 /* ================================================= a few paper-card procs = */
@@ -406,8 +403,6 @@ const cards = {
         if (im && im.complete && im.naturalWidth) ctx.drawImage(im, R[0], R[1]-lift, R[2], R[3]);
         else { ctx.fillStyle="rgb(232,228,216)"; ctx.fillRect(R[0],R[1]-lift,R[2],R[3]); }
         ctx.restore();
-        if (!st.curtainT0)
-          H.type(ctx,"· click the curtain ·", 764, 1010, {cells:3.4,align:"center",alpha:0.7,color:"#f0ece0",plain:true,seed:77});
       }
     },
   },
