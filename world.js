@@ -997,9 +997,9 @@ const ACTIONS = {
 /* Where the guest book lives — Clay's Cloudflare Worker (tools/guestbook-worker.js),
    so the book is SHARED and permanent instead of per-visitor. Locally the little
    tools/serve.py still answers "/gb"; anywhere else this absolute URL is used. */
-const GB_URL = location.hostname === "localhost" || location.hostname === "127.0.0.1"
-  ? "/gb"
-  : "https://retrospective-guestbook.clayburton.workers.dev/";
+const GB_REMOTE = "https://retrospective-guestbook.clayburton.workers.dev/";
+const GB_URL = (typeof location !== "undefined" &&
+                /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) ? "/gb" : GB_REMOTE;
 const GB = {
   remote:null,
   async fetchRemote(cb){ try{ const r=await fetch(GB_URL,{cache:"no-store"}); if(r.ok){ this.remote=await r.json(); cb&&cb(); } }catch(e){} },

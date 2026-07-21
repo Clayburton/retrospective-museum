@@ -13,6 +13,7 @@ const dir = dirname(fileURLToPath(import.meta.url));
 
 // --- shims so world.js runs headless -------------------------------------
 global.window = { addEventListener(){}, removeEventListener(){} };
+global.location = { hostname: "audit.local", search: "", href: "" };
 global.localStorage = { getItem: () => null, setItem: () => {}, removeItem: () => {} };
 const stubCtx = new Proxy({}, { get: () => () => stubCtx });
 global.document = {
