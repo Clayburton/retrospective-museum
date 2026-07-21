@@ -74,18 +74,22 @@ function loadImg(name) {
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
 const SAVE_K = "retro.state";
+/* Only what should outlive a visit is stored: the key you've EARNED (so the
+   doors stay unlocked) and whether the mirror cam was on. The mouse-and-key
+   scene itself is session-only — `keyShown`/`keyTaken` reset on every load, so
+   poking the mouse always uncovers the key again. */
 function saveSt(S){
   try { localStorage.setItem(SAVE_K, JSON.stringify({
-    hasKey: S.st.hasKey ? 1 : 0, keyShown: S.st.keyShown ? 1 : 0, camWanted: S.st.camWanted ? 1 : 0 })); }
+    hasKey: S.st.hasKey ? 1 : 0, camWanted: S.st.camWanted ? 1 : 0 })); }
   catch(e){}
 }
 function loadSt(S){
   try {
     const o = JSON.parse(localStorage.getItem(SAVE_K) || "{}");
     if (o.hasKey)    S.st.hasKey = 1;
-    if (o.keyShown)  S.st.keyShown = 1;
     if (o.camWanted) S.st.camWanted = 1;
   } catch(e){}
+  S.st.keyShown = 0; S.st.keyTaken = 0;         // the hole is always worth searching again
 }
 
 /* ================================================= a few paper-card procs = */
@@ -355,6 +359,7 @@ const cards = {
       { r:[706,600,150,320], cur:"fwd", go:"hall-2", t:"dissolve", spd:"fast" },
       { r:[1210,830,150,150], cur:"hand", fn:"boothBell", sfx:"bellLow" },
       { r:[90,420,240,690],  cur:"lock", curKey:"key", fn:"movieDoor", onHover:"movieHover" },
+      ...bulbHots([[780,276]]),                       // the hanging lantern
     ],
   },
   /* ---- the movie theatre, behind the padlocked hallway door ---- */
@@ -415,6 +420,7 @@ const cards = {
       { r:[1250,360,244,780], cur:"lock", curKey:"key", fn:"mirrorDoor", onHover:"mirrorHover" },
       { r:[318,460,160,420], cur:"zoom", fn:"toFrame", pic:1, sfx:"knock" },
       { r:[1010,470,180,410], cur:"zoom", fn:"toFrame", pic:2, sfx:"knock" },
+      ...bulbHots([[764,248]]),                       // the hanging lantern
     ],
   },
 
@@ -425,7 +431,8 @@ const cards = {
     hots:[
       { r:[430,300,660,1080], cur:"hand", go:"rotunda", t:"barnOpen", spd:"slow", sfx:"creakDoor" },
     ],
-    draw(ctx,H){ H.type(ctx,"MVSEVM", 806, 230, { cells:4.2, align:"center", color:"#101010", plain:true, seed:41, spacing:0.18 }); },
+    // the lit transom over the doors — big enough to actually read
+    draw(ctx,H){ H.type(ctx,"ROTUNDA", 800, 236, { cells:9, align:"center", color:"#101010", plain:true, seed:41, spacing:0.08 }); },
   },
 
   /* ---- rotunda hub ---- */
@@ -499,7 +506,7 @@ const cards = {
       { r:[660,880,360,300], cur:"hand", fn:"takeKey" },
     ],
     draw(ctx,H,S,t){
-      if (!S.st.hasKey && S.st.keyShown){
+      if (S.st.keyShown && !S.st.keyTaken){
         // the key lies just below the mouse, exactly where the pick-up animation lifts it from
         elem(ctx,"el-key", 690, 945, 280, 180);
         H.type(ctx,"the janitor's key", 830, 1150, {cells:2.8,align:"center",color:"#101010",plain:true});
@@ -796,15 +803,15 @@ const ACTIONS = {
   /* mouse hole — poke the mouse and it shifts just enough to uncover the key (it stays put) */
   mouseSqueak(hot,H,S){
     H.sfx("squeak");
-    if (S.st.keyShown || S.st.hasKey) return;
-    S.st.keyShown = 1; saveSt(S);
+    if (S.st.keyShown) return;                           // it has already shifted aside
+    S.st.keyShown = 1;
     setTimeout(()=>H.sfx("keys"), 240);
     S.A.dirty=true;
   },
   takeKey(hot,H,S){
     if (!S.st.keyShown){ H.sfx("tickSoft"); return; }    // nothing there until the mouse moves
-    if (S.st.hasKey){ H.sfx("tickSoft"); return; }
-    S.st.hasKey=1; saveSt(S); H.sfx("keys"); setTimeout(()=>H.sfx("squeak"),200);
+    if (S.st.keyTaken){ H.sfx("tickSoft"); return; }
+    S.st.keyTaken=1; S.st.hasKey=1; saveSt(S); H.sfx("keys"); setTimeout(()=>H.sfx("squeak"),200);
     H.anim("mousehole", 900, (ctx,k)=>{ ctx.save(); ctx.globalAlpha=1-k; ctx.translate(830,1035-k*160); ctx.rotate(k*0.6);
       const s=1+k*1.4; elem(ctx,"el-key",-140*s,-90*s,280*s,180*s); ctx.restore(); });
     S.A.dirty=true;
@@ -868,6 +875,10 @@ const ACTIONS = {
 };
 
 /* ========================================================== GUEST BOOK == */
+/* Where the guest book lives. "/gb" = the local tools/serve.py only — on a static
+   host (GitHub Pages) that 404s and the book falls back to each visitor's own
+   browser, so nobody sees anybody else's signatures. For a SHARED, permanent
+   book deploy tools/guestbook-worker.js and paste its URL here. */
 const GB_URL = "/gb";
 const GB = {
   remote:null,
