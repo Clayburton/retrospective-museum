@@ -758,7 +758,7 @@ const cards = {
     hots:[
       { r:[600,760,340,320], cur:"fwd", go:"hall-1", t:"dissolve", spd:"slow" },
       { r:[280,470,700,150], cur:"hand", sfx:"knock" },
-      { r:[1000,1160,460,300], cur:"hand", fn:"grassMouse" },
+      { r:[0,1140,1536,265], cur:"hand", fn:"grassMouse" },    // the whole ground (above the back-nav band)
       { r:[1156,52,250,196], cur:"hand", fn:"moonFish" },      // the moon
     ],
     draw(ctx,H,S,t){
@@ -1171,16 +1171,25 @@ const ACTIONS = {
     S.A.dirty = true;
   },
 
-  grassMouse(hot,H,S){                 // something startles in the grass and scurries off
-    H.sfx("rustle"); setTimeout(()=>H.sfx("squeak"),120); const r=hot.r;
-    const bx=r[0]+r[2]*0.5, by=r[1]+r[3]-70;
-    H.anim("facade", 760, (ctx,k)=>{   // scurry off to the left — no peek, it's already running
+  grassMouse(hot,H,S,xy){              // something startles WHERE YOU CLICKED and scurries off
+    H.sfx("rustle"); setTimeout(()=>H.sfx("squeak"),120);
+    // start at the click; fall back to the hotspot centre if coords aren't passed.
+    // clamp into the grass band so it can never start up on the building.
+    let sx, sy;
+    if (xy) { const m = H.toMaster(xy[0], xy[1]); sx = m[0]; sy = m[1]; }
+    else { sx = hot.r[0]+hot.r[2]*0.5; sy = hot.r[1]+hot.r[3]-70; }
+    sx = Math.max(60, Math.min(1476, sx));
+    sy = Math.max(1190, Math.min(1460, sy));
+    const dir  = sx < 768 ? -1 : 1;                 // bolt for the nearer edge
+    const dist = (dir < 0 ? sx : 1536 - sx) + 150;  // all the way off that side
+    H.anim("facade", 760, (ctx,k)=>{
       ctx.fillStyle="rgb(24,24,22)";
-      const x=bx-k*540, y=by-6+Math.sin(k*34)*3;
-      ctx.beginPath(); ctx.ellipse(x,y+18,30,15,0.05,0,7); ctx.fill();        // body
-      ctx.beginPath(); ctx.arc(x-20,y+8,15,0,7); ctx.fill();                  // head leading left
+      const x=sx + dir*k*dist, y=sy-6+Math.sin(k*34)*3;
+      ctx.beginPath(); ctx.ellipse(x,y+18,30,15,0.05,0,7); ctx.fill();               // body
+      ctx.beginPath(); ctx.arc(x+dir*20,y+8,15,0,7); ctx.fill();                     // head leads
       ctx.strokeStyle="rgb(24,24,22)"; ctx.lineWidth=5; ctx.lineCap="round";
-      ctx.beginPath(); ctx.moveTo(x+28,y+20); ctx.quadraticCurveTo(x+56,y+8,x+74,y+24); ctx.stroke(); // tail
+      ctx.beginPath(); ctx.moveTo(x-dir*28,y+20);
+      ctx.quadraticCurveTo(x-dir*56,y+8,x-dir*74,y+24); ctx.stroke();                // tail trails
     });
   },
 

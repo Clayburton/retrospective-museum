@@ -246,16 +246,18 @@ function drawStars(now) {
 }
 
 function drawMouse(k) {
-  // startled — already running, tail whipping (same as the museum's)
-  const bx = R_GRASS[0] + R_GRASS[2] * 0.5, by = 1360;
-  const x = (bx - k * 620) * K, y = (by - 6 + Math.sin(k * 34) * 4) * K;
+  // startled WHERE YOU CLICKED — bolts for the nearer edge, tail whipping
+  const sx = S.mouseFrom ? S.mouseFrom[0] : 1230;
+  const sy = S.mouseFrom ? S.mouseFrom[1] : 1360;
+  const dir = S.mouseDir || -1, dist = S.mouseDist || 620;
+  const x = (sx + dir * k * dist) * K, y = (sy - 6 + Math.sin(k * 34) * 4) * K;
   dx.save();
   dx.fillStyle = dx.strokeStyle = "rgb(22,22,20)";
-  dx.beginPath(); dx.ellipse(x, y + 18 * K, 30 * K, 15 * K, 0.05, 0, 7); dx.fill();
-  dx.beginPath(); dx.arc(x - 20 * K, y + 8 * K, 15 * K, 0, 7); dx.fill();
+  dx.beginPath(); dx.ellipse(x, y + 18 * K, 30 * K, 15 * K, 0.05, 0, 7); dx.fill();       // body
+  dx.beginPath(); dx.arc(x + dir * 20 * K, y + 8 * K, 15 * K, 0, 7); dx.fill();           // head leads
   dx.lineWidth = 5 * K; dx.lineCap = "round";
-  dx.beginPath(); dx.moveTo(x + 28 * K, y + 20 * K);
-  dx.quadraticCurveTo(x + 56 * K, y + 8 * K, x + 74 * K, y + 24 * K); dx.stroke();
+  dx.beginPath(); dx.moveTo(x - dir * 28 * K, y + 20 * K);
+  dx.quadraticCurveTo(x - dir * 56 * K, y + 8 * K, x - dir * 74 * K, y + 24 * K); dx.stroke(); // tail trails
   dx.restore();
 }
 
@@ -418,7 +420,16 @@ function enterMuseum() {
 function onDown(e) {
   const h = hitAt(e.clientX, e.clientY);
   if (h === "grass") {
-    if (!S.mouseRun) { SFX.rustle(); setTimeout(SFX.squeak, 120); S.mouseRun = performance.now(); kick(); }
+    if (!S.mouseRun) {
+      const m = c2m(e.clientX, e.clientY);              // where in the grass you clicked
+      const sx = Math.max(60, Math.min(1476, m[0]));
+      const sy = Math.max(1180, Math.min(1490, m[1]));
+      S.mouseFrom = [sx, sy];
+      S.mouseDir  = sx < 768 ? -1 : 1;                  // bolt for the nearer edge
+      S.mouseDist = (S.mouseDir < 0 ? sx : 1536 - sx) + 150;
+      SFX.rustle(); setTimeout(SFX.squeak, 120);
+      S.mouseRun = performance.now(); kick();
+    }
     return;
   }
   if (h === "moon") { pokeMoon(); return; }

@@ -365,6 +365,7 @@ function srand(seed) { let s = seed >>> 0 || 1; return () => (s = (s * 1664525 +
 const H = {
   M,
   _cm: 3,                        // master px per screen cell (set each drawDyn)
+  toMaster(x, y) { return scr2master(x, y, S.A.card); },   // screen px → master coords
   type(ctx, text, x, y, o = {}) {
     const cm = H._cm;
     let size = o.size || 30;
