@@ -1502,15 +1502,28 @@ const ACTIONS = {
 const GB_REMOTE = "https://retrospective-guestbook.clayburton.workers.dev/";
 const GB_URL = (typeof location !== "undefined" &&
                 /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) ? "/gb" : GB_REMOTE;
+const GB_CACHE = "retro.gbCache";     // last book we saw, so it can open instantly
 const GB = {
   remote:null,
   async fetchRemote(cb){
-    try { const r = await fetch(GB_URL,{cache:"no-store"}); if (r.ok) this.remote = await r.json(); }
+    try {
+      const r = await fetch(GB_URL,{cache:"no-store"});
+      if (r.ok) {
+        this.remote = await r.json();
+        // Keep a copy on the device. This is what stops the book opening blank:
+        // all() can then draw the last known pages on the very first frame,
+        // before any network has answered, and the fetch just tops it up.
+        try { localStorage.setItem(GB_CACHE, JSON.stringify(this.remote)); } catch(e) {}
+      }
+    }
     catch(e) {}
     finally { cb && cb(); }        // ALWAYS settle — a waiter must not hang on a bad network
   },
-  all(){ if(this.remote) return this.remote;
-    try{ return JSON.parse(localStorage.getItem("retro.gb")||"[]"); }catch(e){ return []; } },
+  all(){
+    if (this.remote) return this.remote;                    // fetched this session
+    try { const c = localStorage.getItem(GB_CACHE); if (c) return JSON.parse(c); } catch(e) {}
+    try { return JSON.parse(localStorage.getItem("retro.gb")||"[]"); } catch(e) { return []; }
+  },
   input:null,
   show(H,S){
     const el=this.input||(this.input=document.getElementById("gbInput"));
