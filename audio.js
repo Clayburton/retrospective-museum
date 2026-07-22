@@ -202,7 +202,7 @@ const SFX = {
     if (!bellLowBuf) bellLowBuf = mkBellLow();
     const src = ctx.createBufferSource();
     src.buffer = bellLowBuf; src.playbackRate.value = 0.52;
-    const g = ctx.createGain(); g.gain.value = 0.28;      // a memory of a bell, not a bell
+    const g = ctx.createGain(); g.gain.value = 0.19;      // a memory of a bell, not a bell
     src.connect(g); g.connect(sfxBus); src.start();
   },
   knock()    { tone(92, "sine", 0.09, 0.4, 0, 60); burst(0.03, 0.3, 320, "lowpass");
