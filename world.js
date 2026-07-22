@@ -69,7 +69,7 @@ function loadImg(name) {
     i.src = V + name + ".png?av=9"; IMG[name] = i; }
   return IMG[name];
 }
-["el-key","el-key-w","el-ufo","el-straysky","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-lamp-mask","el-bat1","el-bat2",
+["el-key","el-key-w","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-lamp-mask","el-bat1","el-bat2",
  "el-eye1","el-eye2","el-eye3","el-eye4","el-eye5","el-eye6",
  "el-hpic2b","el-hpic2c",
  "el-fishI1","el-fishI2","el-fishI3","el-fishI4","el-fishI5","el-fishI6","el-fishI7","el-fishI8","el-fishI9","el-fishI10","el-fishI11","el-fishI12",
@@ -77,6 +77,7 @@ function loadImg(name) {
  "el-catI1","el-catI2","el-catI3","el-catI4","el-catI5","el-catI6","el-catI7","el-catI8","el-catC1","el-catC2","el-catC3","el-catC4","el-catC5","el-catC6",
  "el-booth-mask",
  "el-eyeF1","el-eyeF2","el-eyeF3","el-eyeF4","el-eyeF5","el-eyeF6","el-eyeF7","el-eyeF8","el-eyeF9","el-eyeF10","el-eyeF11","el-eyeF12","el-eyeF13","el-eyeF14","el-eyeF15","el-eyeF16","el-eyeF17","el-eyeF18","el-eyeF19","el-eyeF20","el-eyeF21","el-eyeF22","el-eyeF23","el-eyeF24","el-eyeF25","el-eyeF26","el-eyeF27","el-eyeF28","el-eyeF29","el-eyeF30","el-eyeF31","el-eyeF32",
+ "el-ufoL1","el-ufoL2","el-ufoL3","el-ufoL4","el-ufoL5","el-ufoL6","el-ufoL7","el-ufoL8","el-ufoL9","el-ufoL10","el-ufoL11","el-ufoL12","el-ufoL13","el-ufoL14","el-ufoL15","el-ufoL16",
  "el-recI1","el-recI2","el-recI3","el-recI4","el-recI5","el-recI6","el-recI7","el-recI8","el-recI9","el-recI10","el-recI11","el-recI12","el-recS1","el-recS2","el-recS3","el-recS4","el-recS5","el-recS6","el-recS7","el-recS8","el-recS9","el-recS10","el-recS11","el-recS12"].forEach(loadImg);
 
 /* ---- what survives a reload: the key, and whether the mirror cam was on ---- */
@@ -166,17 +167,14 @@ function elemWhite(ctx, name, x, y, w, h) {
 }
 /* the stray sky, filling EVERY dark part of the card (above the road and to both
    sides of it) — masked by the master's own darkness so no stars land on the road. */
-let STAR_CV = null, STAR_FOR = null;
-function starfield(H, S) {
-  if (STAR_CV && STAR_FOR === S.cur) return STAR_CV;
-  const im = IMG["el-straysky"];
-  if (!im || !im.complete || !im.naturalWidth) return null;
+const SKY_N = 24, SKY_MS = 83;            // the sky's own frame count and cadence
+let STAR_MASK = null, STAR_FOR = null, STAR_CV = null, STAR_FRAME = -1;
+
+/* Where stars are ALLOWED — derived from the master, so it only changes when the
+   card does. Cached separately from the frames: the mask is the expensive part. */
+function starMask(H, S) {
+  if (STAR_MASK && STAR_FOR === S.cur) return STAR_MASK;
   if (!S.bgSample) return null;                    // master not sampled yet — don't cache a blank
-  const c = document.createElement("canvas"); c.width = M; c.height = M;
-  const g = c.getContext("2d");
-  const th = M * im.naturalHeight / im.naturalWidth;
-  for (let y = 0; y < M; y += th) g.drawImage(im, 0, y, M, th);   // tile down to fill the square
-  // mask: keep stars only where the artwork is dark
   const mk = document.createElement("canvas"); mk.width = 96; mk.height = 96;
   const mg = mk.getContext("2d");
   const id = mg.createImageData(96, 96);
@@ -191,11 +189,33 @@ function starfield(H, S) {
     id.data[i] = id.data[i+1] = id.data[i+2] = 255; id.data[i+3] = a;
   }
   mg.putImageData(id, 0, 0);
+  STAR_MASK = mk; STAR_FOR = S.cur; STAR_FRAME = -1;
+  return mk;
+}
+
+/* the stray sky, filling EVERY dark part of the card (above the road and to both
+   sides of it) — masked by the master's own darkness so no stars land on the road.
+   Recomposited only when the frame index actually changes (~12/sec), not once per
+   render, so an animated sky costs no more than the still one used to. */
+function starfield(H, S, t) {
+  const mk = starMask(H, S);
+  if (!mk) return null;
+  const n = Math.floor(t / SKY_MS) % SKY_N;
+  if (STAR_CV && STAR_FRAME === n) return STAR_CV;
+  const im = IMG["el-sky" + (n + 1)];
+  if (!im || !im.complete || !im.naturalWidth) return STAR_CV;   // not in yet — hold the last good one
+  if (!STAR_CV) { STAR_CV = document.createElement("canvas"); STAR_CV.width = M; STAR_CV.height = M; }
+  const g = STAR_CV.getContext("2d");
+  g.setTransform(1, 0, 0, 1, 0, 0);
+  g.globalCompositeOperation = "source-over";
+  g.clearRect(0, 0, M, M);
+  const th = M * im.naturalHeight / im.naturalWidth;
+  for (let y = 0; y < M; y += th) g.drawImage(im, 0, y, M, th);   // tile down to fill the square
   g.globalCompositeOperation = "destination-in";
   g.drawImage(mk, 0, 0, M, M);
   g.globalCompositeOperation = "source-over";
-  STAR_CV = c; STAR_FOR = S.cur;
-  return c;
+  STAR_FRAME = n;
+  return STAR_CV;
 }
 /* ================================================== the movie theatre === */
 const SCREEN_R = [352, 405, 823, 535];        // the screen opening, master coords
@@ -331,6 +351,7 @@ function twinkleStars(ctx, t) {
 /* Measured off the art by scanning for the widest bright run: the disc is 210
    across with its top edge at y71, so it's a circle of r105 centred here. (A
    cloud band crosses its lower half, which is what fooled an earlier read.) */
+const UFO_N = 16, UFO_D = 70, UFO_MS = 3000;   // saucer frames / cadence / flight time
 const MOON = { cx: 1281, cy: 176, r: 105 };
 /* Two loops that share ONE crop, so the catch cannot jump relative to the sit:
    idle = 12 frames of him fishing with the ripples spreading; pull = 19 frames
@@ -340,8 +361,10 @@ const MOON = { cx: 1281, cy: 176, r: 105 };
    Measured on the shared crop: head 0.154 down, seat 0.714, ripple centre 0.707
    across. Sized so the seat lands on the cloud band crossing the moon (y205..260)
    AND the ripples still fall inside the disc — solving both caps w at 200.
+   The band runs level the full width, so moving him to the cloud RIGHT of the
+   moon is a pure x slide; his seat height is unchanged.
    y must stay >= 0: the star reaches the very top row of the shared crop. */
-const FISH = { w: 200, x: 1181, y: 52 };
+const FISH = { w: 200, x: 1320, y: 52 };
 const FISH_IDLE_D = [100,100,100,100,100,100,100,100,100,100,100,100];
 const FISH_PULL_D = [110,80,80,80,80,80,80,110,100,100,100,100,100,100,100,100];
 const FISH_MS   = FISH_PULL_D.reduce((a, b) => a + b, 0);
@@ -552,7 +575,7 @@ function bulbHots(pts) {
 }
 function starsBg(on) {                          // fill the WHOLE window (letterbox bars too) with stars
   const b = document.body.style;
-  b.backgroundImage = on ? `url(${V}el-straysky.png?av=9)` : "";
+  b.backgroundImage = on ? `url(${V}el-straysky-anim.png?av=9)` : "";   // APNG — the browser loops it
   if (!on) return;
   // match the card's on-screen star scale so the bars and the card read as one sky
   const st = document.getElementById("stage");
@@ -616,7 +639,7 @@ const cards = {
     leave(H,S){ starsBg(false); },
     draw(ctx,H,S,t){
       const st=S.st;
-      if (st.starsOut) { const sf=starfield(H,S); if (sf) ctx.drawImage(sf,0,0); }
+      if (st.starsOut) { const sf=starfield(H,S,t); if (sf) ctx.drawImage(sf,0,0); }
       if (!st.lampOut) {                         // glow at the drawn lamp head (top-right)
         const lx=1035, ly=345;
         // hot core → soft halo. Separate stops keep the dither from muddying it into
@@ -1110,16 +1133,21 @@ const ACTIONS = {
   /* street */
   skyUFO(hot,H,S){
     const st=S.st;
+    // the night sky lands the moment the saucer finishes — pull those frames in
+    // now so they're warm by then, rather than making everyone wait at boot
+    for (let i = 1; i <= SKY_N; i++) loadImg("el-sky" + i);
     if (st.starsOut){ H.sfx("tickSoft"); return; }
     if (st.ufoFlying) return;
     st.ufoFlying=1; H.sfx("whisper");
     H.anim("street", 3000, (ctx,k)=>{
-      const x = -300 + k*2100, y = 240 + Math.sin(k*3.14)*(-60), w = 360, h = 118;
+      const x = -300 + k*2100, y = 240 + Math.sin(k*3.14)*(-60), w = 360, h = 104;
       // render the saucer offscreen and punch the lamp out of it, so it passes
       // BEHIND the streetlamp instead of sailing over the top of it
       const cv = ufoCv(w, h), g = cv.getContext("2d");
       g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,w,h);
-      elemWhite(g,"el-ufo", 0, 0, w, h);         // black line art → white, or it's invisible up there
+      // its lights cycle as it crosses; all 16 frames share one crop so the
+      // saucer itself cannot jitter while they blink
+      elemWhite(g,"el-ufoL" + (Math.floor(k * UFO_MS / UFO_D) % UFO_N + 1), 0, 0, w, h);
       const mk = IMG["el-lamp-mask"];
       if (mk && mk.complete && mk.naturalWidth) {
         g.globalCompositeOperation = "destination-out";
