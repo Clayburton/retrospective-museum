@@ -70,7 +70,7 @@ function loadImg(name) {
   return IMG[name];
 }
 ["el-key","el-key-w","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-lamp-mask","el-bat1","el-bat2",
- "el-eye1","el-eye2","el-eye3","el-eye4","el-eye5","el-eye6",
+ "el-face1",
  "el-hpic2b","el-hpic2c",
  "el-fishI1","el-fishI2","el-fishI3","el-fishI4","el-fishI5","el-fishI6","el-fishI7","el-fishI8","el-fishI9","el-fishI10","el-fishI11","el-fishI12",
  "el-fishP1","el-fishP2","el-fishP3","el-fishP4","el-fishP5","el-fishP6","el-fishP7","el-fishP8","el-fishP9","el-fishP10","el-fishP11","el-fishP12","el-fishP13","el-fishP14","el-fishP15","el-fishP16","el-fishP17","el-fishP18","el-fishP19",
@@ -285,14 +285,20 @@ function gbPage(S){
 function mhShow() {}
 
 /* the eye in the left hallway picture — six frames, open → shut → open */
-const EYE_SEQ = [[1,90],[2,70],[3,70],[4,180],[5,110],[6,130]];
-const EYE_MS  = EYE_SEQ.reduce((a,b)=>a+b[1],0);
+/* the face in the left frame: at rest it holds frame 1 (eyes open); a click runs
+   the blink straight through and settles open again. 10 frames at the gif's own
+   40ms. Only frame 1 is preloaded — the rest are pulled in when you reach the
+   card, so 1MB of blink isn't charged to the front door. */
+const FACE_N = 10, FACE_D = 40;
+const EYE_MS = FACE_N * FACE_D;
+let FACE_WARM = false;
+function warmFace(){ if (FACE_WARM) return; FACE_WARM = true;
+  for (let i = 2; i <= FACE_N; i++) loadImg("el-face" + i); }
 function eyeFrame(S, t) {
   if (!S.st.eyeT0) return 1;                       // at rest it is wide open
-  let e = t - S.st.eyeT0;
-  if (e < 0 || e >= EYE_MS) return 1;
-  for (const [f,d] of EYE_SEQ) { if (e < d) return f; e -= d; }
-  return 1;
+  const e = t - S.st.eyeT0;
+  if (e < 0 || e >= EYE_MS) return 1;              // ...and settles open again
+  return Math.min(FACE_N, Math.floor(e / FACE_D) + 1);
 }
 
 /* offscreen the saucer is composited in, so the lamp can be punched out of it */
@@ -361,10 +367,13 @@ const MOON = { cx: 1281, cy: 176, r: 105 };
    Measured on the shared crop: head 0.154 down, seat 0.714, ripple centre 0.707
    across. Sized so the seat lands on the cloud band crossing the moon (y205..260)
    AND the ripples still fall inside the disc — solving both caps w at 200.
-   The band runs level the full width, so moving him to the cloud RIGHT of the
-   moon is a pure x slide; his seat height is unchanged.
+   The band runs level the full width, so moving him along it is a pure x slide.
+   Seat height is set from his TUSH (frac 0.584 — where the torso ends and the
+   legs bend down), NOT the bottom of the sprite, which is his dangling feet:
+   sitting the feet on the cloud left him hovering 20px above it. x is capped at
+   1340 — past that his ripples run off the right edge of the card.
    y must stay >= 0: the star reaches the very top row of the shared crop. */
-const FISH = { w: 200, x: 1320, y: 52 };
+const FISH = { w: 200, x: 1338, y: 79 };
 const FISH_IDLE_D = [100,100,100,100,100,100,100,100,100,100,100,100];
 const FISH_PULL_D = [110,80,80,80,80,80,80,110,100,100,100,100,100,100,100,100];
 const FISH_MS   = FISH_PULL_D.reduce((a, b) => a + b, 0);
@@ -639,7 +648,6 @@ const cards = {
     leave(H,S){ starsBg(false); },
     draw(ctx,H,S,t){
       const st=S.st;
-      if (st.starsOut) { const sf=starfield(H,S,t); if (sf) ctx.drawImage(sf,0,0); }
       if (!st.lampOut) {                         // glow at the drawn lamp head (top-right)
         const lx=1035, ly=345;
         // hot core → soft halo. Separate stops keep the dither from muddying it into
@@ -665,6 +673,9 @@ const cards = {
         // lamp out — the whole street actually goes dark (the art's lamp is lit, so we cover it)
         ctx.fillStyle="rgba(6,6,8,0.72)"; ctx.fillRect(0,0,M,M);
       }
+      // the sky goes on ABOVE the blackout: killing the street lamp shouldn't dim
+      // the stars, they're not lit by it
+      if (st.starsOut) { const sf=starfield(H,S,t); if (sf) ctx.drawImage(sf,0,0); }
       H.type(ctx,"the museum is behind you", 768, 1500, { cells:3.2, align:"center", alpha:0.28, color:"#8a867c", plain:true });
       // the way out — painted on the road at the end of it; brightens when you hover the end
       const leaving = S.hover && S.hover.exitZone;
@@ -852,6 +863,7 @@ const cards = {
     id:"mousehole", img:V+"mousehole.png", tone:"ink", room:"y17", ambient:"room",
     nav:{ back:"y17a" },
     hots:[
+      { r:[250,380,400,620], cur:"hand", sfx:"rummage" },        // the archive boxes stacked up
       { r:[810,700,250,180], cur:"listen", fn:"mouseSqueak" },   // the mouse curled up in the dark
       { r:[660,880,360,300], cur:"hand", fn:"takeKey" },
     ],
@@ -870,13 +882,14 @@ const cards = {
     nav:{ back:"hall-2" },
     hots:[ { r:HFRAME_R, cur:"hand", fn:"framePoke" } ],
     leave(H,S){ mhShow(false); },
-    after(H,S){ if ((S.st.hframePic||1) === 2 && S.st.manhole) mhShow(true); },
+    after(H,S){ warmFace();                      // pull the blink frames in before they're wanted
+      if ((S.st.hframePic||1) === 2 && S.st.manhole) mhShow(true); },
     draw(ctx,H,S,t){
       const n = S.st.hframePic || 1, R = HFRAME_R;
       ctx.fillStyle = "#000"; ctx.fillRect(R[0], R[1], R[2], R[3]);
       // the picture FILLS its frame; the frame masks whatever spills over
       if (n === 1) {
-        elemCover(ctx, "el-eye" + eyeFrame(S,t), R[0], R[1], R[2], R[3]);     // the eye that blinks
+        elemCover(ctx, "el-face" + eyeFrame(S,t), R[0], R[1], R[2], R[3]);   // the face that blinks
       } else {
         const pic = HPIC2_SEQ[(S.st.hpic2 || 0) % HPIC2_SEQ.length];
         elemCover(ctx, pic.n, R[0], R[1], R[2], R[3], pic.ax);
@@ -1147,7 +1160,10 @@ const ACTIONS = {
       g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,w,h);
       // its lights cycle as it crosses; all 16 frames share one crop so the
       // saucer itself cannot jitter while they blink
-      elemWhite(g,"el-ufoL" + (Math.floor(k * UFO_MS / UFO_D) % UFO_N + 1), 0, 0, w, h);
+      // draw as-is: this sprite has FILL as well as line work, so recolouring the
+      // whole silhouette white (as the old pure-line-art saucer needed) turns it
+      // into a solid blob. White body + black detail already reads on night sky.
+      elem(g,"el-ufoL" + (Math.floor(k * UFO_MS / UFO_D) % UFO_N + 1), 0, 0, w, h);
       const mk = IMG["el-lamp-mask"];
       if (mk && mk.complete && mk.naturalWidth) {
         g.globalCompositeOperation = "destination-out";

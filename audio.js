@@ -315,6 +315,13 @@ const SFX = {
                tone(360, "triangle", 0.08, 0.032, 0.11, 660);
                tone(660, "triangle", 0.07, 0.018, 0.18, 420);
                burst(0.02, 0.05, 1700, "bandpass", 0.01); },
+  // going through the archive boxes: dry irregular paper rustles, a duller slide,
+  // and the box itself shifting — deliberately crunchy rather than clean
+  rummage()  { [0, 0.085, 0.17, 0.275, 0.355, 0.47].forEach((d, i) =>
+                 burst(0.05 + Math.random()*0.05, 0.125 - i*0.012,
+                       1500 + Math.random()*2200, "bandpass", d));
+               burst(0.045, 0.055, 700, "lowpass", 0.205);
+               tone(120, "square", 0.05, 0.022, 0.30, 92); },
   musicbox() { const notes = [1318, 1568, 1760, 2093, 1760, 1568, 1318];
                notes.forEach((f, i) => tone(f, "sine", 0.5, 0.10, i * 0.22)); },
 };
