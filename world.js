@@ -71,7 +71,7 @@ function loadImg(name) {
 }
 ["el-key","el-key-w","el-hpic1","el-hpic2","el-reds","el-mirror-mask","el-movie-mask","el-lamp-mask","el-bat1","el-bat2",
  "el-face1",
- "el-hpic2b","el-hpic2c",
+ "el-hpic2b","el-hpic2c","el-hpic2d",
  "el-fishI1","el-fishI2","el-fishI3","el-fishI4","el-fishI5","el-fishI6","el-fishI7","el-fishI8","el-fishI9","el-fishI10","el-fishI11","el-fishI12",
  "el-fishP1","el-fishP2","el-fishP3","el-fishP4","el-fishP5","el-fishP6","el-fishP7","el-fishP8","el-fishP9","el-fishP10","el-fishP11","el-fishP12","el-fishP13","el-fishP14","el-fishP15","el-fishP16","el-fishP17","el-fishP18","el-fishP19",
  "el-catI1","el-catI2","el-catI3","el-catI4","el-catI5","el-catI6","el-catI7","el-catI8","el-catC1","el-catC2","el-catC3","el-catC4","el-catC5","el-catC6",
@@ -263,6 +263,7 @@ const HPIC2_SEQ = [
   { n:"el-hpic2"  },
   { n:"el-hpic2b" },
   { n:"el-hpic2c", ax:1 },
+  { n:"el-hpic2d" },
 ];
 
 /* The guest book's bottom bar. All three sit BELOW the invisible keystroke-catcher
@@ -803,9 +804,13 @@ const cards = {
         const cv = movieCv(), g = cv.getContext("2d");
         g.setTransform(1,0,0,1,0,0); g.clearRect(0,0,R[2],R[3]);
         const vw=FILM.video.videoWidth, vh=FILM.video.videoHeight;
-        const s=Math.min(R[2]/vw, R[3]/vh);                // contain — never crop the frame
+        // COVER, not contain: the film is 16:9 and the opening is 1.54, so fitting
+        // it inside left 36px of black along the top and bottom. Filling the
+        // opening trims ~64px off each side instead, which reads as a projector
+        // slightly overshooting its screen — the way it should.
+        const s=Math.max(R[2]/vw, R[3]/vh);
         try{ g.filter="grayscale(1) contrast(1.15)"; }catch(e){}
-        g.fillStyle="#000"; g.fillRect(0,0,R[2],R[3]);     // letterbox in black
+        g.fillStyle="#000"; g.fillRect(0,0,R[2],R[3]);     // backing, in case a frame is late
         g.drawImage(FILM.video, (R[2]-vw*s)/2, (R[3]-vh*s)/2, vw*s, vh*s);
         try{ g.filter="none"; }catch(e){}
         const mk = IMG["el-movie-mask"];
