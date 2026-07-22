@@ -1504,7 +1504,11 @@ const GB_URL = (typeof location !== "undefined" &&
                 /^(localhost|127\.0\.0\.1)$/.test(location.hostname)) ? "/gb" : GB_REMOTE;
 const GB = {
   remote:null,
-  async fetchRemote(cb){ try{ const r=await fetch(GB_URL,{cache:"no-store"}); if(r.ok){ this.remote=await r.json(); cb&&cb(); } }catch(e){} },
+  async fetchRemote(cb){
+    try { const r = await fetch(GB_URL,{cache:"no-store"}); if (r.ok) this.remote = await r.json(); }
+    catch(e) {}
+    finally { cb && cb(); }        // ALWAYS settle — a waiter must not hang on a bad network
+  },
   all(){ if(this.remote) return this.remote;
     try{ return JSON.parse(localStorage.getItem("retro.gb")||"[]"); }catch(e){ return []; } },
   input:null,
@@ -1583,3 +1587,18 @@ ACTIONS.plaqueClick=function(hot,H,S){ const T=S.typeOn; if(T&&!T.done){ T.skip=
 window.WORLD = { start:"facade", cards, songs, PROCS, ACTIONS, build, ALBUM11, FILM, CAM };
 
 })();
+
+
+/* The guest book used to be fetched when you opened it, which is why it popped in
+   a beat late. Pull it at boot instead and put it on the loading bar with
+   everything else, so by the time anyone reaches the rotunda it's simply there.
+   The book still re-fetches on open, so signatures added since you loaded the
+   page still appear — that refresh just has something to draw underneath it now. */
+(function warmGuestBook() {
+  const L = window.LOADER;
+  L && L.expect(1);
+  let settled = false;
+  const tick = () => { if (!settled) { settled = true; L && L.did(); } };
+  try { GB.fetchRemote(tick); } catch (e) { tick(); }
+  setTimeout(tick, 4000);          // an unreachable worker must never hold the front door shut
+}());
