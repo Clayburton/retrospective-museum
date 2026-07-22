@@ -294,6 +294,19 @@ const EYE_MS = FACE_N * FACE_D;
 let FACE_WARM = false;
 function warmFace(){ if (FACE_WARM) return; FACE_WARM = true;
   for (let i = 2; i <= FACE_N; i++) loadImg("el-face" + i); }
+/* The card paints a black backing behind the picture, so drawing a frame that
+   hasn't decoded yet shows as a black rectangle — that's the glitch on the very
+   first blink, before the lazily-loaded frames have landed. Walk back to the
+   nearest frame that IS ready; frame 1 is preloaded, so this always terminates. */
+function faceImg(S, t) {
+  let f = eyeFrame(S, t);
+  while (f > 1) {
+    const im = IMG["el-face" + f];
+    if (im && im.complete && im.naturalWidth) break;
+    f--;
+  }
+  return "el-face" + f;
+}
 function eyeFrame(S, t) {
   if (!S.st.eyeT0) return 1;                       // at rest it is wide open
   const e = t - S.st.eyeT0;
@@ -403,9 +416,10 @@ function drawFisher(ctx, S, t) {
   const H2 = FISH.w * 370 / 324;
   ctx.save();
   ctx.globalAlpha = alpha;                   // partial alpha → the shader dithers him in
-  elemWhite(ctx, im, FISH.x, FISH.y, FISH.w, H2);   // white against the night sky
-  // ...but he'd vanish where he overlaps the bright moon, so re-ink that part
-  ctx.beginPath(); ctx.arc(MOON.cx, MOON.cy, MOON.r, 0, 7); ctx.clip();
+  // Drawn AS-IS, one pass. This sprite carries its own fill (~65%) plus line work,
+  // so it already reads on both surfaces: white body against the night sky, black
+  // detail against the moon. The old white-silhouette pass existed for pure line
+  // art and flattened his legs into a blob the moment he sat off the disc.
   elem(ctx, im, FISH.x, FISH.y, FISH.w, H2);
   ctx.restore();
 }
@@ -889,7 +903,7 @@ const cards = {
       ctx.fillStyle = "#000"; ctx.fillRect(R[0], R[1], R[2], R[3]);
       // the picture FILLS its frame; the frame masks whatever spills over
       if (n === 1) {
-        elemCover(ctx, "el-face" + eyeFrame(S,t), R[0], R[1], R[2], R[3]);   // the face that blinks
+        elemCover(ctx, faceImg(S,t), R[0], R[1], R[2], R[3]);                // the face that blinks
       } else {
         const pic = HPIC2_SEQ[(S.st.hpic2 || 0) % HPIC2_SEQ.length];
         elemCover(ctx, pic.n, R[0], R[1], R[2], R[3], pic.ax);
@@ -1321,7 +1335,11 @@ const ACTIONS = {
   },
 
   /* hallway picture zoom */
-  toFrame(hot,H,S){ S.st.hframePic = hot.pic; H.go("hframe",{ t:"zoomOpen", spd:"fast" }); },
+  toFrame(hot,H,S){
+    S.st.hframePic = hot.pic;
+    warmFace();                                   // start the blink frames on the way in
+    H.go("hframe",{ t:"zoomOpen", spd:"fast" });
+  },
 
   /* whichever picture you're stood in front of, poking it does its own thing */
   framePoke(hot,H,S){
