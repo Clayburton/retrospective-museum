@@ -94,6 +94,7 @@ const S = {
   mouseRun: 0,
   flickA: null,
   hoverCta: false,
+  fish: null,                      // { state:1|2, t0 } — the man on the moon, once woken
   raf: 0,
 };
 
@@ -101,6 +102,40 @@ const S = {
 const R_SIGN  = [280, 470, 700, 150];       // the frieze — knock on it
 const R_GRASS = [0, 1140, 1536, 400];       // the whole ground: something lives out there
 const R_DOOR  = [590, 750, 360, 340];       // the front doors — one of only two ways in
+const R_MOON  = [1156, 52, 250, 196];       // the moon — someone's up there fishing
+
+/* ---- the man on the moon, ported straight from the game so it behaves the same.
+   Same sprite frames the museum uses (served from ../assets/art), same timing,
+   same two-click life: first poke he dithers into being and sits down fishing,
+   the next poke he hauls a star up out of the cloud, then settles back to fishing.
+   On the banner's dynamic layer he needs no two-pass trick — the layer carries
+   its own black AND white with alpha, so drawing the frame as-is reads correctly
+   on the night sky AND over the bright moon. ---- */
+const FISH      = { w: 200, x: 1338, y: 79 };   // identical placement to the museum
+const FISH_ASP  = 370 / 324;                     // the shared sprite crop
+const FISH_IDLE_D = [100,100,100,100,100,100,100,100,100,100,100,100];
+const FISH_PULL_D = [110,80,80,80,80,80,80,110,100,100,100,100,100,100,100,100];
+const FISH_MS   = FISH_PULL_D.reduce((a, b) => a + b, 0);
+const FISH_FADE = 800;                           // he dithers into being
+
+function frameAt(delays, ms, loop) {
+  const total = delays.reduce((a, b) => a + b, 0);
+  let k = loop ? ms % total : Math.min(ms, total - 1);
+  for (let i = 0; i < delays.length; i++) { if (k < delays[i]) return i + 1; k -= delays[i]; }
+  return delays.length;
+}
+
+/* the frames live one level up, in the museum's own art folder — the banner is at
+   /enter/, so ../assets/art resolves to exactly what the game loads. No duplicate
+   bytes on the banner, and they're the same file the browser may already have cached. */
+const FISH_IMG = {};
+let fishLoaded = false;
+function loadFish() {
+  if (fishLoaded) return; fishLoaded = true;
+  const add = (n) => { const im = new Image(); im.src = "../assets/art/" + n + ".png?av=9"; FISH_IMG[n] = im; };
+  for (let i = 1; i <= 12; i++) add("el-fishI" + i);
+  for (let i = 1; i <= 16; i++) add("el-fishP" + i);
+}
 const CTA_LABEL = "[ enter the museum ]";
 const CTA_CELLS = 6.4;
 /* The plate's rect is computed on demand, NOT stashed while drawing — hit-testing
@@ -146,6 +181,10 @@ const SFX = {
   rustle(){ for (let i = 0; i < 5; i++) burst(0.05, 0.10, 5200 + Math.random() * 1600, "highpass", i * 0.05); },
   squeak(){ tone(2900, "sine", 0.07, 0.08, 0, 3600); tone(3300, "sine", 0.05, 0.05, 0.09, 2700); },
   creak() { tone(150, "sawtooth", 0.5, 0.05, 0, 70); burst(0.3, 0.05, 500, "lowpass"); },
+  musicbox() { const notes = [1318, 1568, 1760, 2093, 1760, 1568, 1318];
+               notes.forEach((f, i) => tone(f, "sine", 0.5, 0.10, i * 0.22)); },
+  flap() { for (let i = 0; i < 3; i++) burst(0.04, 0.22 - i * 0.05, 600 - i * 120, "bandpass", i * 0.11); },
+  ding() { tone(1568, "sine", 0.5, 0.14); },
 };
 
 /* ------------------------------------------------------- the dynamic layer -- */
@@ -220,10 +259,32 @@ function drawMouse(k) {
   dx.restore();
 }
 
+/* the man on the moon. Frame + fade computed from a wall clock, exactly like the
+   museum, so a throttled iframe can't strand him mid-catch. Drawn as-is onto the
+   dynamic layer — white body, black linework — reads on both sky and moon. */
+function drawFisher(now) {
+  if (!S.fish) return;
+  const e = now - S.fish.t0;
+  let name, alpha = 1;
+  if (S.fish.state === 2) {                          // hauling a star up
+    name = "el-fishP" + frameAt(FISH_PULL_D, e, false);
+  } else {                                            // sitting, fishing — dithering in
+    name = "el-fishI" + frameAt(FISH_IDLE_D, e, true);
+    alpha = Math.min(1, e / FISH_FADE);
+  }
+  const im = FISH_IMG[name];
+  if (!im || !im.complete || !im.naturalWidth) return;   // not decoded yet — the fade covers it
+  dx.save();
+  dx.globalAlpha = alpha;                            // partial alpha → the shader dithers him in
+  dx.drawImage(im, FISH.x * K, FISH.y * K, FISH.w * K, FISH.w * FISH_ASP * K);
+  dx.restore();
+}
+
 function drawDyn(now) {
   dx.clearRect(0, 0, DYN, DYN);
 
   drawStars(now);
+  drawFisher(now);
 
   // the building's own lettering, on its blank frieze
   type("RETROSPECTIVE", 762, 566, { cells: 10, spacing: 0.08 });
@@ -318,6 +379,7 @@ function hitAt(cx, cy) {
   if (inRect(m, ctaRect())) return "cta";
   if (inRect(m, R_DOOR))  return "enter";
   if (inRect(m, R_SIGN))  return "sign";
+  if (inRect(m, R_MOON))  return "moon";
   if (inRect(m, R_GRASS)) return "grass";
   return null;                                     // sky and surround: just scenery
 }
@@ -330,7 +392,22 @@ function onMove(e) {
   const was = S.hoverCta;
   S.hoverCta = (h === "cta");
   setCursor(h === "cta" || h === "enter" ? "fwd" : (h ? "hand" : null));
+  if (h === "moon") loadFish();                    // warm the frames while the pointer's on him
   if (was !== S.hoverCta) kick();
+}
+
+/* first poke wakes him and he sits down to fish; the next poke lands a star; then
+   he settles back to fishing. Same life the museum's moonFish runs. */
+function pokeMoon() {
+  loadFish();
+  const f = S.fish;
+  if (!f) { S.fish = { state: 1, t0: performance.now() }; SFX.musicbox(); kick(); return; }
+  if (f.state === 2) return;                        // mid-catch — let him work
+  f.state = 2; f.t0 = performance.now();
+  SFX.flap(); SFX.ding(); kick();
+  setTimeout(() => {                                // back to sitting on a wall clock
+    if (S.fish && S.fish.state === 2) { S.fish = { state: 1, t0: performance.now() - FISH_FADE }; kick(); }
+  }, FISH_MS + 40);
 }
 function enterMuseum() {
   SFX.creak();
@@ -344,6 +421,7 @@ function onDown(e) {
     if (!S.mouseRun) { SFX.rustle(); setTimeout(SFX.squeak, 120); S.mouseRun = performance.now(); kick(); }
     return;
   }
+  if (h === "moon") { pokeMoon(); return; }
   if (h === "sign") { SFX.knock(); flick(0.30, 900); return; }
   // only a deliberate click on the building or the invitation opens the door
   if (h === "cta" || h === "enter") enterMuseum();
@@ -359,7 +437,10 @@ stage.addEventListener("webglcontextlost", e => e.preventDefault());
 stage.addEventListener("webglcontextrestored", () => resize());
 
 /* ------------------------------------------------------------------- loop -- */
-function busy() { return !!(S.mouseRun || S.flickA); }
+// 60fps while something moves: the mouse, a flicker, or the fisherman fading in /
+// hauling a star. Once he's just sitting, the slow star interval drives his ripples.
+function fishBusy() { return !!(S.fish && (S.fish.state === 2 || (now => now - S.fish.t0 < FISH_FADE)(performance.now()))); }
+function busy() { return !!(S.mouseRun || S.flickA || fishBusy()); }
 function kick() { if (!S.raf) S.raf = requestAnimationFrame(frame); }
 function frame(now) {
   S.raf = 0;
@@ -377,5 +458,7 @@ setInterval(() => { if (!document.hidden) kick(); }, 95);
 
 resize();
 kick();
+setTimeout(loadFish, 1500);      // warm the moon frames in the background, well before a click
 
-window.__enter = { S, P, U, resize, kick, flick, STARS, mouse: () => { S.mouseRun = performance.now(); kick(); } };
+window.__enter = { S, P, U, resize, kick, flick, STARS, pokeMoon,
+  mouse: () => { S.mouseRun = performance.now(); kick(); } };
