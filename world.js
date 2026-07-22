@@ -332,6 +332,57 @@ function mirrorCv() {
   return MIRROR_CV;
 }
 
+/* What the camera actually photographs: the reflection ALONE.
+   It used to grab the mirror region off the composited stage, which meant the
+   drawn slide camera — it overlaps the glass and is deliberately composited in
+   FRONT of the reflection — got baked into every print. This re-renders the
+   webcam straight from the video with the same mirror/cover-fit maths, and
+   applies no glass mask, so the print is just the sitter. */
+function shotCv() {
+  const R = MIRROR_R;
+  const cv = document.createElement("canvas");
+  cv.width = R[2]; cv.height = R[3];
+  const g = cv.getContext("2d");
+  const vw = CAM.video.videoWidth, vh = CAM.video.videoHeight;
+  const sc = Math.max(R[2] / vw, R[3] / vh) * 1.02;
+  g.save();
+  g.translate(R[2] / 2, R[3] / 2); g.scale(-1, 1);       // a mirror, so flip it back
+  try { g.filter = "grayscale(1) contrast(1.2)"; } catch (e) {}
+  g.drawImage(CAM.video, -vw * sc / 2, -vh * sc / 2, vw * sc, vh * sc);
+  g.restore();
+  return cv;
+}
+
+/* The photo is kept in GREY for the book: it's drawn into the dynamic layer and
+   the shader dithers it there, at the room's own cell size — pre-dithering it
+   would alias badly once it's scaled down into the little photo corners.
+   The DOWNLOAD, though, should look like the museum, so that copy gets a proper
+   ordered dither on the way out. */
+const BAYER8 = [
+   0,32, 8,40, 2,34,10,42,  48,16,56,24,50,18,58,26,
+  12,44, 4,36,14,46, 6,38,  60,28,52,20,62,30,54,22,
+   3,35,11,43, 1,33, 9,41,  51,19,59,27,49,17,57,25,
+  15,47, 7,39,13,45, 5,37,  63,31,55,23,61,29,53,21];
+function ditherCv(src, cell) {
+  const cv = document.createElement("canvas");
+  cv.width = src.width; cv.height = src.height;
+  const g = cv.getContext("2d");
+  g.drawImage(src, 0, 0);
+  const id = g.getImageData(0, 0, cv.width, cv.height), d = id.data;
+  for (let y = 0; y < cv.height; y++) {
+    const by = ((y / cell) | 0) & 7;
+    for (let x = 0; x < cv.width; x++) {
+      const i = (y * cv.width + x) * 4;
+      const lum = (d[i] * 299 + d[i + 1] * 587 + d[i + 2] * 114) / 1000;
+      const th = (BAYER8[by * 8 + ((((x / cell) | 0) & 7))] + 0.5) / 64 * 255;
+      const v = lum > th ? 255 : 0;
+      d[i] = d[i + 1] = d[i + 2] = v; d[i + 3] = 255;
+    }
+  }
+  g.putImageData(id, 0, 0);
+  return cv;
+}
+
 /* ---- the night sky over the facade. The art's own stars are fixed; these breathe. ---- */
 const SKY_STARS = (() => {
   let s = 20130722;
@@ -1429,12 +1480,13 @@ const ACTIONS = {
   snapPhoto(hot,H,S){
     if (PHOTOS.length>=6){ H.sfx("blot"); return; }
     H.sfx("shutter"); setTimeout(()=>H.sfx("filmPull"),260);
-    // capture the FULL mirror region straight from the fixed-square backing canvas
-    const stage=document.getElementById("stage"), back=stage.width;   // backing px (square)
-    const sx=MIRROR_R[0]/M*back, sy=MIRROR_R[1]/M*back, sw=MIRROR_R[2]/M*back, sh=MIRROR_R[3]/M*back;
-    const cv=document.createElement("canvas"); cv.width=Math.max(2,Math.round(sw)); cv.height=Math.max(2,Math.round(sh));
-    try{ cv.getContext("2d").drawImage(stage, sx,sy,sw,sh, 0,0,cv.width,cv.height);
-      const url=cv.toDataURL("image/png"), img=new Image(); img.src=url; PHOTOS.push({url,img}); }catch(e){}
+    if (!(CAM.on && CAM.video && CAM.video.videoWidth)) { H.sfx("blot"); return; }   // nothing to take
+    try {
+      const cv = shotCv();                                  // the reflection only — never the camera
+      const img = new Image(); img.src = cv.toDataURL("image/png");
+      const url = ditherCv(cv, 2).toDataURL("image/png");   // the copy you keep, in 1-bit
+      PHOTOS.push({ url, img });
+    } catch(e) {}
     H.anim("mirror", 800, (ctx,k)=>{ if(k<0.22){ ctx.fillStyle="rgba(255,255,255,"+(0.9*(1-k/0.22)).toFixed(3)+")"; ctx.fillRect(MIRROR_R[0]-40,MIRROR_R[1]-40,MIRROR_R[2]+80,MIRROR_R[3]+80); } });
   },
   savePhoto(hot,H,S){
