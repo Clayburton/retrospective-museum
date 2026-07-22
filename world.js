@@ -335,15 +335,15 @@ const MOON = { cx: 1281, cy: 176, r: 105 };
 /* Two loops that share ONE crop, so the catch cannot jump relative to the sit:
    idle = 12 frames of him fishing with the ripples spreading; pull = 19 frames
    of him hauling a star up. Both gifs carry their own per-frame delays (the
-   pull holds on frames 10 and 19), so playback walks a delay table rather than
+   pull opens and rests longer), so playback walks a delay table rather than
    assuming a constant rate — a fixed fps desyncs them from the artwork.
-   Measured on the sprite: head 0.342 down, seat 0.751, ripples 0.891-0.955,
-   ripple centre 0.660 across. Placed so the seat lands on the cloud band that
-   crosses the moon (y205..260) and the ripples still fall inside the disc.
+   Measured on the shared crop: head 0.154 down, seat 0.714, ripple centre 0.707
+   across. Sized so the seat lands on the cloud band crossing the moon (y205..260)
+   AND the ripples still fall inside the disc — solving both caps w at 200.
    y must stay >= 0: the star reaches the very top row of the shared crop. */
-const FISH = { w: 210, x: 1176, y: 2 };
+const FISH = { w: 200, x: 1181, y: 52 };
 const FISH_IDLE_D = [100,100,100,100,100,100,100,100,100,100,100,100];
-const FISH_PULL_D = [80,80,80,80,80,80,80,80,80,340,80,80,80,80,80,80,80,80,250];
+const FISH_PULL_D = [110,80,80,80,80,80,80,110,100,100,100,100,100,100,100,100];
 const FISH_MS   = FISH_PULL_D.reduce((a, b) => a + b, 0);
 const FISH_FADE = 800;                                    // he dithers into being
 
@@ -368,7 +368,7 @@ function drawFisher(ctx, S, t) {
     im = "el-fishI" + frameAt(FISH_IDLE_D, e, true);
     alpha = Math.min(1, e / FISH_FADE);
   }
-  const H2 = FISH.w * 506 / 368;
+  const H2 = FISH.w * 370 / 324;
   ctx.save();
   ctx.globalAlpha = alpha;                   // partial alpha → the shader dithers him in
   elemWhite(ctx, im, FISH.x, FISH.y, FISH.w, H2);   // white against the night sky
